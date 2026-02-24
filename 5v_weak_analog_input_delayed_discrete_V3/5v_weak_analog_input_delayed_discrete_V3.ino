@@ -44,7 +44,7 @@ float mapVinToOutput(float vin) {
   if (vin > 2.0) return (vin + 0.5);
   if (vin > 1.5) return 2.5;
   if (vin > 1.0) return 2.0;
-  if (vin <= 0.8) return 1.0;
+  if (vin <= 0.8) return (1.0 - 0.3);
 
 }
 
