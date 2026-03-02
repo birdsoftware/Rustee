@@ -1,5 +1,7 @@
 #include "LoRaWan_APP.h"
 #include "Arduino.h"
+#include "HT_SSD1306Wire.h"
+#include <Wire.h> 
 
 HardwareSerial Ext(1);
 
@@ -15,6 +17,10 @@ HardwareSerial Ext(1);
 #define LORA_IQ_INVERSION_ON    false
 
 #define BUFFER_SIZE 128
+
+
+//OLED
+static SSD1306Wire  display(0x3c, 500000, SDA_OLED, SCL_OLED, GEOMETRY_128_64, RST_OLED); // addr , freq , i2c group , resolution , rst
 
 static RadioEvents_t RadioEvents;
 bool lora_idle = true;
@@ -56,6 +62,22 @@ bool readLine(char* out, size_t maxLen, size_t* outLen) {
   return false;
 }
 
+void VextON(void)
+{
+  pinMode(Vext,OUTPUT);
+  digitalWrite(Vext, LOW);
+}
+
+void drawOledStatus(const String& line1, const String& line2 = "", const String& line3 = "", const String& line4 = "") {
+  display.clear();
+  display.setFont(ArialMT_Plain_10);
+  display.drawString(0, 0, line1);
+  if (line2.length()) display.drawString(0, 12, line2);
+  if (line3.length()) display.drawString(0, 24, line3);
+  if (line4.length()) display.drawString(0, 36, line4);
+  display.display();
+}
+
 void setup() {
   Serial.begin(115200);
   delay(800);
@@ -63,7 +85,18 @@ void setup() {
 
   Ext.begin(9600, SERIAL_8N1, RX_PIN, TX_PIN);
 
+  // Start MCU/Radio stack
   Mcu.begin(HELTEC_BOARD, SLOW_CLK_TPYE);
+
+  // ---- OLED 
+  VextON();
+  delay(100);
+  display.init();
+  drawOledStatus("LoRa TX Ready",
+               "Waiting Nano...",
+               "",
+               "");
+  // ------------------------------------------
 
   RadioEvents.TxDone = OnTxDone;
   RadioEvents.TxTimeout = OnTxTimeout;
@@ -97,8 +130,16 @@ void loop() {
     size_t len = 0;
 
     if (readLine(txpacket, BUFFER_SIZE, &len)) {
+      //debug
       Serial.print("Sending over LoRa: ");
       Serial.println(txpacket);
+
+      drawOledStatus(
+      "LoRa TX READY",
+      "UART: " + String(txpacket),
+      "Bytes: " + String(len),
+      "Sending..."
+      );
 
       Radio.Send((uint8_t*)txpacket, len);
       lora_idle = false;
