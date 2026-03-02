@@ -5,11 +5,17 @@
 
 #define RF_FREQUENCY 915000000 // Hz
 
-#define LORA_BANDWIDTH 0
-#define LORA_SPREADING_FACTOR 7
-#define LORA_CODINGRATE 1
-#define LORA_PREAMBLE_LENGTH 8
-#define LORA_SYMBOL_TIMEOUT 0
+#define LORA_BANDWIDTH                              0         // [0: 125 kHz,
+                                                              //  1: 250 kHz,
+                                                              //  2: 500 kHz,
+                                                              //  3: Reserved]
+#define LORA_SPREADING_FACTOR                       7         // [SF7..SF12]
+#define LORA_CODINGRATE                             1         // [1: 4/5,
+                                                              //  2: 4/6,
+                                                              //  3: 4/7,
+                                                              //  4: 4/8]
+#define LORA_PREAMBLE_LENGTH                        8         // Same for Tx and Rx
+#define LORA_SYMBOL_TIMEOUT                         0         // Symbols
 #define LORA_FIX_LENGTH_PAYLOAD_ON false
 #define LORA_IQ_INVERSION_ON false
 
@@ -31,6 +37,7 @@ static RadioEvents_t RadioEvents;
 
 int16_t lastRssi = 0;
 int16_t rxSize = 0;
+String signalQuality;
 
 bool lora_idle = true;
 
@@ -114,6 +121,10 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi_in, int8_t snr) {
   lastRssi = rssi_in;
   rxSize = size;
 
+  if (lastRssi > -70) signalQuality = "Strong";
+  else if (lastRssi > -100) signalQuality = "Medium";
+  else signalQuality = "Weak";
+
   // prevent overflow
   if (size >= BUFFER_SIZE) size = BUFFER_SIZE - 1;
 
@@ -135,8 +146,8 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi_in, int8_t snr) {
   // Show on OLED
   drawOledStatus("RX Packet:",
                  String(rxpacket),
-                 "PWM:  " + String(pwm),
-                 "dBm: " + String(lastRssi));//"Len:  " + String(rxSize));
+                 "SNR:  " + String(snr) + " dB",
+                 "RSSI: " + signalQuality + " " + String(lastRssi) + " dBm");//"Len:  " + String(rxSize));
 
   lora_idle = true;
 }
