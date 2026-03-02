@@ -38,6 +38,7 @@ static RadioEvents_t RadioEvents;
 int16_t lastRssi = 0;
 int16_t rxSize = 0;
 String signalQuality;
+String linkQuality;
 
 bool lora_idle = true;
 
@@ -125,6 +126,11 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi_in, int8_t snr) {
   else if (lastRssi > -100) signalQuality = "Medium";
   else signalQuality = "Weak";
 
+  if (snr > 8) linkQuality = "Excellent";
+else if (snr > 3) linkQuality = "Good";
+else if (snr > 0) linkQuality = "Fair";
+else linkQuality = "Weak";
+
   // prevent overflow
   if (size >= BUFFER_SIZE) size = BUFFER_SIZE - 1;
 
@@ -146,7 +152,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi_in, int8_t snr) {
   // Show on OLED
   drawOledStatus("RX Packet:",
                  String(rxpacket),
-                 "SNR:  " + String(snr) + " dB",
+                 "SNR:  " + linkQuality + " " + String(snr) + " dB",
                  "RSSI: " + signalQuality + " " + String(lastRssi) + " dBm");//"Len:  " + String(rxSize));
 
   lora_idle = true;
