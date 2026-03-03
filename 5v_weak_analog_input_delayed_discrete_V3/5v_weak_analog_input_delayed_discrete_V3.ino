@@ -18,8 +18,14 @@
 // A0 ── 0.1µF ── GND 
 // Input signal (0-5v)
 
+// pot to adjust max PWM out b.bird 3.3.26
+// right outer leg → 5V
+// Other outer leg → GND
+// Middle (wiper) → A1
+
 
 const int analogInPin = A0;
+const int potPin = A1;
 const int pwmOutPin   = 9;
 
 const unsigned long riseDelayMs = 500;
@@ -43,8 +49,8 @@ float discreteOutput(float vin) {
   if (vin > 2.0) return vin + 0.5; //131
   if (vin > 1.5) return 2.5;       //128
   if (vin > 1.0) return 2.0;       //102
-  if (vin > 0.8) return 2.0;       //51
-  return 2;
+  if (vin > 0.8) return 1.5;       //77
+  return 1.5;                      //77
   //return 0.7; //vin <= 0.8.        //36 pwm
 }
 
@@ -77,7 +83,17 @@ void loop() {
 
   int pwm = (int)(discreteVin * 255.0 / 5.0 + 0.5);
   if (pwm < 0) pwm = 0;
-  if (pwm > 235) pwm = 235;//3.92V <- 5v x 200/255
+  if (pwm > 235) pwm = 235;//4.6V <- 5v x 235/255 //~3.92V <- 5v x 200/255
+
+  // Pot sets max clamp
+  int pwmMax;
+  int potADC = analogRead(potPin);                // 0..1023
+  if (potADC < 102) {//Pot ADC range is 0–1023, 10% ~102
+    pwmMax = 0; }
+  else {
+    pwmMax = map(potADC, 0, 1023, 0, 235);      // 0..235 max
+  }
+  if (pwm > pwmMax) pwm = pwmMax;
 
   analogWrite(pwmOutPin, pwm);
 
@@ -87,6 +103,8 @@ void loop() {
   Serial.print(vin);
   Serial.print(" | discreteVin: ");
   Serial.print(discreteVin);
+  Serial.print(" | potADC: ");
+  Serial.print(potADC);
   Serial.print(" | PWM: ");
   Serial.println(pwm);
 
