@@ -43,8 +43,9 @@ float discreteOutput(float vin) {
   if (vin > 2.0) return vin + 0.5; //131
   if (vin > 1.5) return 2.5;       //128
   if (vin > 1.0) return 2.0;       //102
-  if (vin > 0.8) return 1.0;       //51
-  return 0.7; //vin <= 0.8.        //36 pwm
+  if (vin > 0.8) return 2.0;       //51
+  return 2;
+  //return 0.7; //vin <= 0.8.        //36 pwm
 }
 
 int readA0HiZAvg(int samples = 16) {
@@ -76,7 +77,7 @@ void loop() {
 
   int pwm = (int)(discreteVin * 255.0 / 5.0 + 0.5);
   if (pwm < 0) pwm = 0;
-  if (pwm > 200) pwm = 200;//3.92V <- 5v x 200/255
+  if (pwm > 235) pwm = 235;//3.92V <- 5v x 200/255
 
   analogWrite(pwmOutPin, pwm);
 
