@@ -18,9 +18,15 @@
 // A0 ── 0.1µF ── GND 
 // Input signal (0-5v)
 
+// pot to adjust max PWM out
+// right outer leg → 5V
+// Other outer leg → GND
+// Middle (wiper) → A1
+
 //update lora
 
 const int analogInPin = A0;
+const int potPin = A1;
 const unsigned long riseDelayMs = 500;
 // delayed-rise / instant-fall state (based on ADC reading)
 int lastADC = 0;
@@ -67,6 +73,11 @@ void loop() {
   int pwm = (int)(discreteVin * 255.0 / 5.0 + 0.5);
   if (pwm < 0) pwm = 0;
   if (pwm > 200) pwm = 200;//3.92V <- 5v x 200/255
+
+  // Pot sets max clamp
+  int potADC = analogRead(potPin);                // 0..1023
+  int pwmMax = map(potADC, 0, 1023, 0, 200);      // 0..200 max
+  if (pwm > pwmMax) pwm = pwmMax;
 
   n++;
   if (n > 99) n = 0;
