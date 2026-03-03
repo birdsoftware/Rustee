@@ -18,10 +18,13 @@
 // A0 ── 0.1µF ── GND 
 // Input signal (0-5v)
 
-// pot to adjust max PWM out
+// pot to adjust max PWM out b.bird 3.3.26
 // right outer leg → 5V
 // Other outer leg → GND
 // Middle (wiper) → A1
+//|----dead zone----|---------------- usable range ----------------|
+//0%                10%                                             100%
+//PWM=0             start ramping                                   PWM=235
 
 //update lora
 
