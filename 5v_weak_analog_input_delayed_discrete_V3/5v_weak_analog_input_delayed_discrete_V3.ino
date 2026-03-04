@@ -18,10 +18,10 @@
 // A0 ── 0.1µF ── GND 
 // Input signal (0-5v)
 
-// pot to adjust max PWM out b.bird 3.3.26
-// right outer leg → 5V
-// Other outer leg → GND
-// Middle (wiper) → A1
+// Pot to adjust max PWM out b.bird 3.3.26
+//  Right outer leg → 5V
+//  Middle (wiper) → A1
+//  Other outer leg → GND
 
 
 const int analogInPin = A0;
@@ -85,7 +85,7 @@ void loop() {
   if (pwm < 0) pwm = 0;
   if (pwm > 235) pwm = 235;//4.6V <- 5v x 235/255 //~3.92V <- 5v x 200/255
 
-  // Pot sets max clamp
+  // // Pot sets max clamp
   int pwmMax;
   int potADC = analogRead(potPin);                // 0..1023
   if (potADC < 102) {//Pot ADC range is 0–1023, 10% ~102
