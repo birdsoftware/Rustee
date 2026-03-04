@@ -18,10 +18,10 @@
 // A0 ── 0.1µF ── GND 
 // Input signal (0-5v)
 
-// pot to adjust max PWM out b.bird 3.3.26
-// right outer leg → 5V
-// Other outer leg → GND
+// Pot to adjust max PWM out b.bird 3.3.26
+// Right outer leg → 5V
 // Middle (wiper) → A1
+// Other outer leg → GND
 //|----dead zone----|---------------- usable range ----------------|
 //0%                10%                                             100%
 //PWM=0             start ramping                                   PWM=235
@@ -30,25 +30,30 @@
 
 const int analogInPin = A0;
 const int potPin = A1;
+
 const unsigned long riseDelayMs = 500;
+
 // delayed-rise / instant-fall state (based on ADC reading)
 int lastADC = 0;
 int targetADC = 0;
 unsigned long riseStartTime = 0;
 bool rising = false;
+
 // Nano ADC reference voltage
 const float VREF_ADC = 5.0;
+
 float adcToVin(int adc) {
   // This is Vin at A0 pin. If you have a divider from a 0–5V signal, adjust this.
   return (adc * VREF_ADC) / 1023.0;
 }
 float discreteOutput(float vin) {
-                                    //200 max
+                                    //235 max
   if (vin > 2.0) return vin + 0.5;  //131 pwm
   if (vin > 1.5) return 2.5;        //128
   if (vin > 1.0) return 2.0;        //102
-  if (vin > 0.8) return 1.0;        //51
-  return 0.7; //vin <= 0.8          //36
+  if (vin > 0.8) return 1.5;        //77 //51 1v
+  return 1.5;                       //77
+  //return 0.7; //vin <= 0.8          //36
 }
 int readA0HiZAvg(int samples = 16) {
   analogRead(analogInPin);          // throw-away
@@ -79,7 +84,7 @@ void loop() {
 
   // Pot sets max clamp
   int potADC = analogRead(potPin);                // 0..1023
-  int pwmMax = map(potADC, 0, 1023, 0, 200);      // 0..200 max
+  int pwmMax = map(potADC, 0, 1023, 0, 235); //4.6V <- 5v x 235/255   // 0..200 max //~3.92V <- 5v x 200/255
   if (pwm > pwmMax) pwm = pwmMax;
 
   n++;

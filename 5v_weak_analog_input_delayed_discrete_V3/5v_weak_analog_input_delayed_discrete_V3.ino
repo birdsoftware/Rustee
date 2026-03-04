@@ -22,6 +22,9 @@
 //  Right outer leg → 5V
 //  Middle (wiper) → A1
 //  Other outer leg → GND
+//|----dead zone----|---------------- usable range ----------------|
+//0%                10%                                             100%
+//PWM=0             start ramping                                   PWM=235
 
 
 const int analogInPin = A0;
@@ -45,7 +48,7 @@ float adcToVin(int adc) {
 }
 
 float discreteOutput(float vin) {
-                                   //200 max
+                                   //235 max
   if (vin > 2.0) return vin + 0.5; //131
   if (vin > 1.5) return 2.5;       //128
   if (vin > 1.0) return 2.0;       //102
@@ -85,7 +88,7 @@ void loop() {
   if (pwm < 0) pwm = 0;
   if (pwm > 235) pwm = 235;//4.6V <- 5v x 235/255 //~3.92V <- 5v x 200/255
 
-  // // Pot sets max clamp
+  // Pot sets max clamp
   int pwmMax;
   int potADC = analogRead(potPin);                // 0..1023
   if (potADC < 102) {//Pot ADC range is 0–1023, 10% ~102
