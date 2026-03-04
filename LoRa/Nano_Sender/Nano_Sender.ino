@@ -51,9 +51,8 @@ float discreteOutput(float vin) {
   if (vin > 2.0) return vin + 0.5;  //131 pwm
   if (vin > 1.5) return 2.5;        //128
   if (vin > 1.0) return 2.0;        //102
-  if (vin > 0.8) return 1.5;        //77 //51 1v
-  return 1.5;                       //77
-  //return 0.7; //vin <= 0.8          //36
+  if (vin > 0.8) return 1.0;        //51 //1.5v = 77
+  return 0.7;                       //36
 }
 int readA0HiZAvg(int samples = 16) {
   analogRead(analogInPin);          // throw-away
