@@ -12,7 +12,7 @@
 // D9 → 4.7k → SignalOut
 // SignalOut → 10µF → GND
 
-// input
+// input - old
 // Due to weak signal and high source impedance of Arduino we are using Cap and read averaging. So for high Z - source
 // approach (throw away a read + settle + average). See readA0HiZAvg() below.
 // A0 ── 0.1µF ── GND 
@@ -27,6 +27,7 @@
 //PWM=0             start ramping                                   PWM=235
 
 //update lora
+//UART to Lora Analog to pin RX_PIN 19 GPIO.
 
 const int analogInPin = A0;
 const int potPin = A1;
@@ -79,16 +80,17 @@ void loop() {
   float discreteVin = discreteOutput(vin);
   int pwm = (int)(discreteVin * 255.0 / 5.0 + 0.5);
   if (pwm < 0) pwm = 0;
-  if (pwm > 200) pwm = 200;//3.92V <- 5v x 200/255
+  if (pwm > 180) pwm = 180;//3.92V <- 5v x 200/255//3.3/5.0×255≈168
 
   // Pot sets max clamp
   int potADC = analogRead(potPin);                // 0..1023
-  int pwmMax = map(potADC, 0, 1023, 0, 235); //4.6V <- 5v x 235/255   // 0..200 max //~3.92V <- 5v x 200/255
+  int pwmMax = map(potADC, 0, 1023, 0, 180); //4.6V <- 5v x 235/255   // 0..200 max //~3.92V <- 5v x 200/255
   if (pwm > pwmMax) pwm = pwmMax;
 
   n++;
   if (n > 99) n = 0;
 
+  //UART to Lora Analog to pin RX_PIN 19 GPIO. LoRa is reading at 9600
   Serial.println(String(pwm) + " I: " 
   + String(vin, 3) + " O: " + String(discreteVin, 3) + " #" + String(n));
   
