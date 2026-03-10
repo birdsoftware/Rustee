@@ -48,7 +48,7 @@ bool seen0C=false, seen0D=false, seen04=false, seen05=false, seen0F=false, seen4
 
 // Dynamic pedal min/max
 float appMin = 14.9f;//15.3
-float appMax = 80.4f; //78.8
+float appMax = 20.0f;//80.4f; //78.8
 const float APP_EPSILON = 0.15f; // Prevent tiny noise from constantly changing min/max
 
 // Output values
