@@ -217,7 +217,7 @@ void loop() {
     Serial.println(
       String(pwm) +
       " I: " + String(vin, 3) +
-      " APP: " + String(app, 2) + 
+      //" APP: " + String(app, 2) + 
       " #" + String(n)
     );
   }
