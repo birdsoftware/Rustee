@@ -15,6 +15,28 @@
 // input
 // CAN pedal position used for input signal
 
+// INPUT HW-184 wiring
+// HW-184 CAN-H -> ODB-II Pin 6 CAN High
+// HW-184 CAN-L -> ODB-II Pin 14 CAN LOW
+// HW-184 Vcc -> 5V Nano
+// HW-184 GND -> GND Nano
+// HW-184 CS -> D10 Nano
+// HW-184 SO -> D12 Nano
+// HW-184 SI -> D11 Nano
+// HW-184 SCK -> D13 Nano
+// HW-184 INT -> D2 Nano
+
+// Nano wiring
+// Nano TX -> 1K -> Node -> 2K -> GND
+// Node -> RX LoRa
+
+// ODB-II wiring
+// ODB-II pin 16 12V -> +IN DC-DC Converter
+// ODB-II pin 4 GND Chassis -> -IN DC-DC Converter
+// ODB-II pin 5 Signal GND -> -IN DC-DC Converter
+
+
+
 #include <SPI.h>
 #include <mcp_can.h>
 
