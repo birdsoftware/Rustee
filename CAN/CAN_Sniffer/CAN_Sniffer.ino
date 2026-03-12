@@ -3,6 +3,14 @@
 // brown	CANL
 // green	CANH
 // yellow	ground signal
+// HW-184 Nano
+// Vcc -> 5V
+// GND -> GND
+// CS -> D10
+// SO - D12
+// SI -> D11
+// SCK -> D13
+// INT - D2
 
 #include <SPI.h>
 #include <mcp_can.h>
