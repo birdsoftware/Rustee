@@ -1,4 +1,5 @@
-// THis runs on an a arduino mini and UART analog write to LoRa
+// THis runs on an a arduino nano. Nano UART analog write to LoRa
+
 // CAN ODB-II -> [HW187] -> [Arduino nano] -> [LoRa V3] ~.~.~> [LoRa V2]
 // CAN ODB-II GND and 12V+ -> [DC-DC Voltage adjuster] -> 5V for nano and LoRa
 
@@ -193,7 +194,7 @@ void loop() {
       //   seen10=true;
       // } break;
 
-      case 0x49: { // APP D
+      case 0x49: { // APP D - foot pedal position
         app = A * 100.0f / 255.0f;
         seen49=true;
         updatePedalMinMax(app);
@@ -219,18 +220,31 @@ void loop() {
     if (seen49) {
       vin = mapPedalToVoltage(app);
 
-      pwm = (int)(vin * 255.0f / 5.0f + 0.5f);
+      //KEEP FOR ANALOG OUTPUT ON 5V NANO SYSTEM
+      // pwm = (int)(vin * 255.0f / 5.0f + 0.5f);
+      // if (pwm < 0) pwm = 0;
+      // if (pwm > 180) pwm = 180;  // cap output
+
+      //UPDATE SENDING TO LoRA 3.3V SYSTEM
+      pwm = (int)(vin * 255.0f / 3.33f + 0.5f);
       if (pwm < 0) pwm = 0;
-      if (pwm > 180) pwm = 180;  // cap output
+      if (pwm > 255) pwm = 255;  // cap output
 
       // Pot sets max clamp
       int potADC = analogRead(potPin);
-      int pwmMax = map(potADC, 0, 1023, 0, 180);
+      int pwmMax = map(potADC, 0, 1023, 0, 255); //was 180
       if (pwm > pwmMax) pwm = pwmMax;
     } else {
       // safe default before pedal seen
       vin = 0.7f;
-      pwm = (int)(vin * 255.0f / 5.0f + 0.5f);
+      //KEEP FOR ANALOG OUTPUT ON 5V NANO SYSTEM
+      //pwm = (int)(vin * 255.0f / 5.0f + 0.5f);
+      pwm = (int)(vin * 255.0f / 3.33f + 0.5f);
+
+      // Pot sets max clamp
+      int potADC = analogRead(potPin);
+      int pwmMax = map(potADC, 0, 1023, 0, 255); //was 180
+      if (pwm > pwmMax) pwm = pwmMax;
     }
 
     n++;
