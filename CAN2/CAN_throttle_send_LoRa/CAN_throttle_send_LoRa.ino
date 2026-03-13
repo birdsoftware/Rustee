@@ -1,3 +1,4 @@
+// THis runs on an a arduino mini and UART analog write to LoRa
 // CAN ODB-II -> [HW187] -> [Arduino nano] -> [LoRa V3] ~.~.~> [LoRa V2]
 // CAN ODB-II GND and 12V+ -> [DC-DC Voltage adjuster] -> 5V for nano and LoRa
 
@@ -70,7 +71,7 @@ bool seen0C=false, seen0D=false, seen04=false, seen05=false, seen0F=false, seen4
 
 // Dynamic pedal min/max
 float appMin = 14.9f;//15.3
-float appMax = 20.0f;//80.4f; //78.8
+float appMax = 18.0f;//80.4f; //78.8 //adjust the max V
 const float APP_EPSILON = 0.15f; // Prevent tiny noise from constantly changing min/max
 
 // Output values

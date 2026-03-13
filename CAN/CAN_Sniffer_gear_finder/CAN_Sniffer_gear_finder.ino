@@ -1,44 +1,26 @@
-// ODB_II to HW-184
-// red	12V+
-// black	ground chassis and signal ground
-// green	CANL
-// white	CANH
-
-// HW-184 _> Nano
-// Vcc ->   5V
-// GND ->   GND
-// CS ->    D10
-// SO -     D12
-// SI ->    D11
-// SCK ->   D13
-// INT ->   D2
-
-// Why this is better
-// This version:
-// reads all queued frames
-// shows only changed frames
-// makes shifter-related bytes easier to spot
-// avoids drowning in repeating messages
-
 #include <SPI.h>
 #include <mcp_can.h>
 
-const int CAN_CS_PIN  = 10;
-const int CAN_INT_PIN = 2;
+const byte CAN_CS_PIN  = 10;
+const byte CAN_INT_PIN = 2;
 
 MCP_CAN CAN0(CAN_CS_PIN);
 
-// Store last seen payload for standard IDs 0x000-0x7FF
-bool seen[2048];
-byte lastLen[2048];
-byte lastData[2048][8];
+// Keep only a small cache of IDs to save RAM
+const byte CACHE_SIZE = 24;
+
+struct CanEntry {
+  unsigned long id;
+  byte len;
+  byte data[8];
+  bool used;
+};
+
+CanEntry cache[CACHE_SIZE];
 
 void printFrame(unsigned long rxId, byte len, byte *buf) {
   Serial.print("ID: 0x");
-  if (rxId < 0x100) Serial.print("0");
-  if (rxId < 0x10)  Serial.print("0");
   Serial.print(rxId, HEX);
-
   Serial.print(" DLC: ");
   Serial.print(len);
   Serial.print(" Data: ");
@@ -51,31 +33,58 @@ void printFrame(unsigned long rxId, byte len, byte *buf) {
   Serial.println();
 }
 
+bool sameFrame(byte len1, byte *data1, byte len2, byte *data2) {
+  if (len1 != len2) return false;
+  for (byte i = 0; i < len1; i++) {
+    if (data1[i] != data2[i]) return false;
+  }
+  return true;
+}
+
+int findEntry(unsigned long rxId) {
+  for (byte i = 0; i < CACHE_SIZE; i++) {
+    if (cache[i].used && cache[i].id == rxId) return i;
+  }
+  return -1;
+}
+
+int findFreeEntry() {
+  for (byte i = 0; i < CACHE_SIZE; i++) {
+    if (!cache[i].used) return i;
+  }
+  return -1;
+}
+
+void saveEntry(byte idx, unsigned long rxId, byte len, byte *buf) {
+  cache[idx].used = true;
+  cache[idx].id = rxId;
+  cache[idx].len = len;
+  for (byte i = 0; i < 8; i++) {
+    cache[idx].data[i] = (i < len) ? buf[i] : 0;
+  }
+}
+
 bool changedFromLast(unsigned long rxId, byte len, byte *buf) {
-  if (rxId > 0x7FF) return true; // ignore storage for extended frames
+  int idx = findEntry(rxId);
 
-  if (!seen[rxId]) {
-    seen[rxId] = true;
-    lastLen[rxId] = len;
-    for (byte i = 0; i < 8; i++) lastData[rxId][i] = buf[i];
-    return true;
-  }
-
-  if (lastLen[rxId] != len) {
-    lastLen[rxId] = len;
-    for (byte i = 0; i < 8; i++) lastData[rxId][i] = buf[i];
-    return true;
-  }
-
-  for (byte i = 0; i < len; i++) {
-    if (lastData[rxId][i] != buf[i]) {
-      lastLen[rxId] = len;
-      for (byte j = 0; j < 8; j++) lastData[rxId][j] = buf[j];
+  if (idx >= 0) {
+    if (sameFrame(cache[idx].len, cache[idx].data, len, buf)) {
+      return false;
+    } else {
+      saveEntry(idx, rxId, len, buf);
       return true;
     }
   }
 
-  return false;
+  int freeIdx = findFreeEntry();
+  if (freeIdx >= 0) {
+    saveEntry(freeIdx, rxId, len, buf);
+    return true;
+  }
+
+  // Cache full: overwrite slot 0, simple fallback
+  saveEntry(0, rxId, len, buf);
+  return true;
 }
 
 void setup() {
@@ -84,11 +93,15 @@ void setup() {
 
   pinMode(CAN_INT_PIN, INPUT);
 
+  for (byte i = 0; i < CACHE_SIZE; i++) {
+    cache[i].used = false;
+  }
+
   if (CAN0.begin(MCP_ANY, CAN_500KBPS, MCP_8MHZ) == CAN_OK) {
     Serial.println("MCP2515 Init OK");
   } else {
     Serial.println("MCP2515 Init FAIL");
-    Serial.println("Try checking wiring / speed / crystal.");
+    Serial.println("Check wiring / bitrate / crystal");
     while (1) {}
   }
 
@@ -106,8 +119,10 @@ void loop() {
       break;
     }
 
-    // Focus on standard 11-bit IDs first
-    rxId &= 0x1FFFFFFF;
+    rxId &= 0x1FFFFFFF; // normalize
+
+    // Ignore extended IDs for now if you want:
+    // if (rxId > 0x7FF) continue;
 
     if (changedFromLast(rxId, len, buf)) {
       printFrame(rxId, len, buf);

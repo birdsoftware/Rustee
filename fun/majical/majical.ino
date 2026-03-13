@@ -133,26 +133,26 @@ void setup() {
 }
 
 void loop() {
-  // summonGlow();      // magic gathers
-  // delay(150);
+  summonGlow();      // magic gathers
+  delay(150);
 
-  // sacredCircle();    // ritual pattern
-  // delay(100);
+  sacredCircle();    // ritual pattern
+  delay(100);
 
-  // orbitSpell();      // rotating energy
-  // delay(100);
+  orbitSpell();      // rotating energy
+  delay(100);
 
-  // unstableEnergy();  // spell becomes unstable
-  // delay(80);
+  unstableEnergy();  // spell becomes unstable
+  delay(80);
 
-  // magicalWave();     // force pushes outward
-  // delay(100);
+  magicalWave();     // force pushes outward
+  delay(100);
 
-  // burstFlash();      // cast!
-  // delay(120);
+  burstFlash();      // cast!
+  delay(120);
 
-  // fallingStars();    // spark fragments
-  // delay(150);
+  fallingStars();    // spark fragments
+  delay(150);
 
   fadeToWhispers();  // quiet ending
   delay(100);
