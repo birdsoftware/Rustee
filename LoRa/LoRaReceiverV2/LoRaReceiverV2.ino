@@ -144,8 +144,11 @@ else linkQuality = "Weak";
 
   // PWM output packet contains an integer like "137"
   int pwm = atoi(rxpacket);          // convert string to int
-  pwm = constrain(pwm, 0, 200);      // your allowed range
+  
+  pwm = constrain(pwm, 0, 255);      // your allowed range
+
   ledcWrite(PWM_PIN, pwm);            // output PWM duty (0..255)
+
   Serial.printf("PWM set to: %d\n", pwm);
   //end PWM              
 
