@@ -47,6 +47,12 @@ const int PWM_PIN = 25;      // pick a GPIO that isn't used by LoRa/OLED
 const int PWM_FREQ = 5000;   // PWM frequency
 const int PWM_RES  = 8;      // 8-bit resolution -> 0..255 duty
 
+// ---- Timeout (no packets recieved for 1 second) 
+unsigned long lastPacketTime = 0;
+const unsigned long SIGNAL_TIMEOUT_MS = 2000;
+bool timedOut = true;
+//
+
 void drawOledStatus(const String& line1, const String& line2 = "", const String& line3 = "", const String& line4 = "") {
   display.clear();
   display.setFont(ArialMT_Plain_10);
@@ -106,6 +112,7 @@ void setup() {
 
   // ---- PWM init ----
   ledcAttach(PWM_PIN, PWM_FREQ, PWM_RES);
+  lastPacketTime = millis(); //for timed out
   ledcWrite(PWM_PIN, 0);                
 }
 
@@ -116,9 +123,20 @@ void loop() {
     Radio.Rx(0); // continuous RX
   }
   Radio.IrqProcess();
+
+  //timed out
+  if (!timedOut && (millis() - lastPacketTime > SIGNAL_TIMEOUT_MS)) {
+    ledcWrite(PWM_PIN, 0);
+    timedOut = true;
+    //Serial.println("0 LoRa timeout - PWM forced to 0");
+    drawOledStatus("LoRa timeout - PWM forced to 0");
+  }
 }
 
 void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi_in, int8_t snr) {
+  lastPacketTime = millis(); //reset timeout
+  timedOut = false; //reset timeout
+
   lastRssi = rssi_in;
   rxSize = size;
 

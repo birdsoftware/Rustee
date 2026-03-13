@@ -1,4 +1,4 @@
-// THis runs on an a arduino nano. Nano UART analog write to LoRa
+// This runs on an a arduino nano. Nano UART analog write to LoRa
 
 // CAN ODB-II -> [HW187] -> [Arduino nano] -> [LoRa V3] ~.~.~> [LoRa V2]
 // CAN ODB-II GND and 12V+ -> [DC-DC Voltage adjuster] -> 5V for nano and LoRa
@@ -76,19 +76,20 @@ float appMax = 18.0f;//80.4f; //78.8 //adjust the max V
 const float APP_EPSILON = 0.15f; // Prevent tiny noise from constantly changing min/max
 
 // Output values
-float vin = 0.7f;          // mapped continuous voltage from APP
-float discreteVin = 0.7f;  // stepped output voltage
+float minV = 0.7f;
+float vin = minV;//0.7f;          // mapped continuous voltage from APP
+//float discreteVin = 0.7f;  // stepped output voltage
 int pwm = 0;
 
-void updatePedalMinMax(float appRaw) {
-  if (appRaw < (appMin - APP_EPSILON)) {
-    appMin = appRaw;
-  }
+// void updatePedalMinMax(float appRaw) {
+//   if (appRaw < (appMin - APP_EPSILON)) {
+//     appMin = appRaw;
+//   }
 
-  if (appRaw > (appMax + APP_EPSILON)) {
-    appMax = appRaw;
-  }
-}
+//   if (appRaw > (appMax + APP_EPSILON)) {
+//     appMax = appRaw;
+//   }
+// }
 
 // --------------------------------------
 // Map CAN APP % to continuous 0.7V..3.3V
@@ -101,7 +102,7 @@ float mapPedalToVoltage(float appRaw) {
   if (x < 0.0f) x = 0.0f;
   if (x > 1.0f) x = 1.0f;
 
-  return 0.7f + x * (3.3f - 0.7f);
+  return minV + x * (3.3f - minV);  //0.7f + x * (3.3f - 0.7f);
 }
 
 void sendPid(uint8_t pid) {
@@ -197,7 +198,7 @@ void loop() {
       case 0x49: { // APP D - foot pedal position
         app = A * 100.0f / 255.0f;
         seen49=true;
-        updatePedalMinMax(app);
+        //updatePedalMinMax(app);
       } break;
 
       case 0x11: { // Throttle plate
@@ -236,7 +237,7 @@ void loop() {
       if (pwm > pwmMax) pwm = pwmMax;
     } else {
       // safe default before pedal seen
-      vin = 0.7f;
+      vin = minV;//0.7f;
       //KEEP FOR ANALOG OUTPUT ON 5V NANO SYSTEM
       //pwm = (int)(vin * 255.0f / 5.0f + 0.5f);
       pwm = (int)(vin * 255.0f / 3.33f + 0.5f);
