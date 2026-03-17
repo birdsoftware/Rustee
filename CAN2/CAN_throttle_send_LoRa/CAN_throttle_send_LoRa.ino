@@ -30,7 +30,7 @@
 
 // Nano wiring
 // Nano TX -> 1K -> Node -> 2K -> GND
-// Node -> RX LoRa
+// Node -> RX LoRa 
 
 // ODB-II wiring
 // ODB-II pin 16 12V -> +IN DC-DC Converter
@@ -70,39 +70,38 @@ uint8_t reqIndex = 0;
 float rpm=0, mph=0, loadPct=0, ectF=0, iatF=0, volts=0, fuelPct=0, maf=0, app=0, th=0;
 bool seen0C=false, seen0D=false, seen04=false, seen05=false, seen0F=false, seen42=false, seen2F=false, seen49=false, seen11=false;
 
-// Dynamic pedal min/max
-float appMin = 14.9f;//15.3
+// Pedal calibration
+float appMin = 14.9f;//15.3//15.69,15.29 // will be replaced during first second if APP is seen
 float appMax = 18.0f;//80.4f; //78.8 //adjust the max V
 const float APP_EPSILON = 0.15f; // Prevent tiny noise from constantly changing min/max
 
 // Output values
-float minV = 0.7f;
-float vin = minV;//0.7f;          // mapped continuous voltage from APP
-//float discreteVin = 0.7f;  // stepped output voltage
+float minV = 0.35f;
+float vin = 0.35f;          // mapped continuous voltage from APP
 int pwm = 0;
 
-// void updatePedalMinMax(float appRaw) {
-//   if (appRaw < (appMin - APP_EPSILON)) {
-//     appMin = appRaw;
-//   }
-
-//   if (appRaw > (appMax + APP_EPSILON)) {
-//     appMax = appRaw;
-//   }
-// }
+// Boot-time APP min learning
+bool calibratingAppMin = true;
+int countApp = 0;
+unsigned long bootMs = 0;
+float learnedAppMin = 1000.0f;
+bool gotAppDuringCalibration = false;
+float effectiveAppMin = 0.0f;
 
 // --------------------------------------
 // Map CAN APP % to continuous 0.7V..3.3V
 // --------------------------------------
 float mapPedalToVoltage(float appRaw) {
-  float range = appMax - appMin;
-  if (range < 0.5f) range = 0.5f;  // avoid divide by zero / tiny range
 
-  float x = (appRaw - appMin) / range;
+  float range = appMax - effectiveAppMin;
+  if (range < 0.5f) range = 0.5f;
+
+  float x = (appRaw - effectiveAppMin) / range;
+
   if (x < 0.0f) x = 0.0f;
   if (x > 1.0f) x = 1.0f;
 
-  return minV + x * (3.3f - minV);  //0.7f + x * (3.3f - 0.7f);
+  return minV + x * (3.3f - minV);
 }
 
 void sendPid(uint8_t pid) {
@@ -198,7 +197,20 @@ void loop() {
       case 0x49: { // APP D - foot pedal position
         app = A * 100.0f / 255.0f;
         seen49=true;
-        //updatePedalMinMax(app);
+
+         if (calibratingAppMin) {
+          countApp++;
+
+          if (app < learnedAppMin) {
+            learnedAppMin = app;
+          }
+
+          if (countApp >= 5) {
+            calibratingAppMin = false;
+            effectiveAppMin = learnedAppMin + 0.5f;
+            appMax = effectiveAppMin + 0.05f * (80.0f - effectiveAppMin);
+          }  gotAppDuringCalibration = true;
+         }
       } break;
 
       case 0x11: { // Throttle plate
@@ -218,35 +230,20 @@ void loop() {
   if (now - lastPrintMs >= 200) {
     lastPrintMs = now;
 
-    if (seen49) {
-      vin = mapPedalToVoltage(app);
+    int potADC = analogRead(potPin);
+    int pwmMax = map(potADC, 0, 1023, 0, 255);
 
-      //KEEP FOR ANALOG OUTPUT ON 5V NANO SYSTEM
-      // pwm = (int)(vin * 255.0f / 5.0f + 0.5f);
-      // if (pwm < 0) pwm = 0;
-      // if (pwm > 180) pwm = 180;  // cap output
+    if (seen49 && !calibratingAppMin) {
+    vin = mapPedalToVoltage(app);
+  } else {
+    vin = minV;
+  }
 
-      //UPDATE SENDING TO LoRA 3.3V SYSTEM
-      pwm = (int)(vin * 255.0f / 3.33f + 0.5f);
-      if (pwm < 0) pwm = 0;
-      if (pwm > 255) pwm = 255;  // cap output
+  pwm = (int)(vin * 255.0f / 3.3f + 0.5f);
 
-      // Pot sets max clamp
-      int potADC = analogRead(potPin);
-      int pwmMax = map(potADC, 0, 1023, 0, 255); //was 180
-      if (pwm > pwmMax) pwm = pwmMax;
-    } else {
-      // safe default before pedal seen
-      vin = minV;//0.7f;
-      //KEEP FOR ANALOG OUTPUT ON 5V NANO SYSTEM
-      //pwm = (int)(vin * 255.0f / 5.0f + 0.5f);
-      pwm = (int)(vin * 255.0f / 3.33f + 0.5f);
-
-      // Pot sets max clamp
-      int potADC = analogRead(potPin);
-      int pwmMax = map(potADC, 0, 1023, 0, 255); //was 180
-      if (pwm > pwmMax) pwm = pwmMax;
-    }
+  if (pwm < 0) pwm = 0;
+  if (pwm > pwmMax) pwm = pwmMax;
+  if (pwm > 200) pwm = 200;
 
     n++;
     if (n > 99) n = 0;
@@ -256,6 +253,8 @@ void loop() {
       String(pwm) +
       " I: " + String(vin, 3) +
       //" APP: " + String(app, 2) + 
+      //" MIN: " + String(appMin, 2) +
+      //(calibratingAppMin ? " CAL" : "") +
       " #" + String(n)
     );
   }

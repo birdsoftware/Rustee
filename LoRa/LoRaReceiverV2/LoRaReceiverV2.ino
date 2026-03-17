@@ -1,3 +1,6 @@
+// B.Bird 3.16.26 Update
+// Removed PWM and using DAC output for pure analog
+
 #include "LoRaWan_APP.h"
 #include "Arduino.h"
 #include <Wire.h>
@@ -43,9 +46,9 @@ String linkQuality;
 bool lora_idle = true;
 
 // ---- PWM output (ESP32 LEDC) ----
-const int PWM_PIN = 25;      // pick a GPIO that isn't used by LoRa/OLED
-const int PWM_FREQ = 5000;   // PWM frequency
-const int PWM_RES  = 8;      // 8-bit resolution -> 0..255 duty
+// const int PWM_PIN = 25;      // pick a GPIO that isn't used by LoRa/OLED
+// const int PWM_FREQ = 5000;   // PWM frequency
+// const int PWM_RES  = 8;      // 8-bit resolution -> 0..255 duty
 
 // ---- Timeout (no packets recieved for 1 second) 
 unsigned long lastPacketTime = 0;
@@ -111,9 +114,9 @@ void setup() {
                     true);
 
   // ---- PWM init ----
-  ledcAttach(PWM_PIN, PWM_FREQ, PWM_RES);
-  lastPacketTime = millis(); //for timed out
-  ledcWrite(PWM_PIN, 0);                
+  // ledcAttach(PWM_PIN, PWM_FREQ, PWM_RES);
+  // lastPacketTime = millis(); //for timed out
+  // ledcWrite(PWM_PIN, 0);                
 }
 
 void loop() {
@@ -126,7 +129,8 @@ void loop() {
 
   //timed out
   if (!timedOut && (millis() - lastPacketTime > SIGNAL_TIMEOUT_MS)) {
-    ledcWrite(PWM_PIN, 0);
+    //ledcWrite(PWM_PIN, 0);
+    dacWrite(25, 0);
     timedOut = true;
     //Serial.println("0 LoRa timeout - PWM forced to 0");
     drawOledStatus("LoRa timeout - PWM forced to 0");
@@ -165,7 +169,8 @@ else linkQuality = "Weak";
   
   pwm = constrain(pwm, 0, 255);      // your allowed range
 
-  ledcWrite(PWM_PIN, pwm);            // output PWM duty (0..255)
+  //ledcWrite(PWM_PIN, pwm);            // output PWM duty (0..255)
+  dacWrite(25, pwm);//
 
   Serial.printf("PWM set to: %d\n", pwm);
   //end PWM              
