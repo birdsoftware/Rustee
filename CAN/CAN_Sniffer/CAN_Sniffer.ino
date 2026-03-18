@@ -11,6 +11,7 @@
 // SI -> D11
 // SCK -> D13
 // INT - D2
+// 115200 baud
 
 #include <SPI.h>
 #include <mcp_can.h>
