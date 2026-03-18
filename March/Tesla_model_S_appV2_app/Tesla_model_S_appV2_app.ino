@@ -1,3 +1,15 @@
+//This program is normal CAN mode. Actively request PID 0x49 APP D
+// 12V -> DC-DC converter -> 5V -> pin2 5V LoRa RSI side
+// GND -> DC-DC converter -> GND -> pin1 GND LoRa RSI side
+// | WCMCU-230 | Heltec ESP32 |
+// | --------- | ------------ |
+// | 3V3       | 3V3          | PRG Side pin 2
+// | GND       | GND          | PRG Side pin 1
+// | CTX       | GPIO13       | PRG Side
+// | CRX       | GPIO17       | RSI side
+// | CANH      | OBD pin 6    |
+// | CANL      | OBD pin 14   |
+
 #include "LoRaWan_APP.h"
 #include "Arduino.h"
 #include "HT_SSD1306Wire.h"
@@ -15,17 +27,35 @@ static SSD1306Wire display(0x3c, 500000, SDA_OLED, SCL_OLED, GEOMETRY_128_64, RS
 #define CAN_RX_PIN GPIO_NUM_17
 
 // ---------------- Timing ----------------
-unsigned long lastStatusUpdate = 0;
-unsigned long frameCount = 0;
+unsigned long lastReqMs = 0;
+unsigned long lastDisplayMs = 0;
+unsigned long lastFrameMs = 0;
+unsigned long n = 0;
+
 bool canStarted = false;
 
-// Store last frame for OLED
-uint32_t lastId = 0;
-uint8_t lastLen = 0;
-uint8_t lastData[8] = {0};
-bool lastExt = false;
-bool gotFrame = false;
+// ---------------- APP / output ----------------
+float app = 0.0f;
+bool seen49 = false;
 
+float appMin = 14.9f;          // fallback default
+float appMax = 18.0f;          // will be auto-adjusted after calibration
+float learnedAppMin = 1000.0f;
+float effectiveAppMin = 14.9f;
+bool calibratingAppMin = true;
+bool gotAppDuringCalibration = false;
+int countApp = 0;
+
+float minV = 0.35f;
+float vin = 0.35f;
+int pwm = 0;
+int pwmMax = 200;
+
+uint32_t lastRespId = 0x000;
+uint8_t lastA = 0;
+uint8_t lastB = 0;
+
+// ---------------- Helper functions ----------------
 void VextON(void) {
   pinMode(Vext, OUTPUT);
   digitalWrite(Vext, LOW);
@@ -46,19 +76,20 @@ void drawOledStatus(const String& line1,
   display.display();
 }
 
-String formatBytesLine(const uint8_t* data, uint8_t len, uint8_t startIndex, uint8_t endIndex) {
-  String s = "";
-  for (uint8_t i = startIndex; i < endIndex && i < len; i++) {
-    if (data[i] < 0x10) s += "0";
-    s += String(data[i], HEX);
-    if (i < endIndex - 1 && i < len - 1) s += " ";
-  }
-  s.toUpperCase();
-  return s;
+float mapPedalToVoltage(float appRaw) {
+  float range = appMax - effectiveAppMin;
+  if (range < 0.5f) range = 0.5f;
+
+  float x = (appRaw - effectiveAppMin) / range;
+
+  if (x < 0.0f) x = 0.0f;
+  if (x > 1.0f) x = 1.0f;
+
+  return minV + x * (3.3f - minV);
 }
 
-bool startCAN500kListenOnly() {
-  twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(CAN_TX_PIN, CAN_RX_PIN, TWAI_MODE_LISTEN_ONLY);
+bool startCAN500kNormal() {
+  twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(CAN_TX_PIN, CAN_RX_PIN, TWAI_MODE_NORMAL);
   twai_timing_config_t t_config = TWAI_TIMING_CONFIG_500KBITS();
   twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
 
@@ -78,41 +109,119 @@ bool startCAN500kListenOnly() {
   return true;
 }
 
-void printFrame(const twai_message_t &msg) {
-  Serial.print("ID: 0x");
-  Serial.print(msg.identifier, HEX);
-  Serial.print(msg.extd ? " EXT" : " STD");
-  Serial.print(" DLC:");
-  Serial.print(msg.data_length_code);
-  Serial.print(" Data:");
+bool sendPid(uint8_t pid) {
+  twai_message_t msg = {};
+  msg.identifier = 0x7DF;
+  msg.extd = 0;
+  msg.rtr = 0;
+  msg.ss = 0;
+  msg.self = 0;
+  msg.dlc_non_comp = 0;
+  msg.data_length_code = 8;
 
-  for (int i = 0; i < msg.data_length_code; i++) {
-    Serial.print(" ");
-    if (msg.data[i] < 0x10) Serial.print("0");
-    Serial.print(msg.data[i], HEX);
+  msg.data[0] = 0x02;
+  msg.data[1] = 0x01;
+  msg.data[2] = pid;
+  msg.data[3] = 0x00;
+  msg.data[4] = 0x00;
+  msg.data[5] = 0x00;
+  msg.data[6] = 0x00;
+  msg.data[7] = 0x00;
+
+  esp_err_t err = twai_transmit(&msg, pdMS_TO_TICKS(50));
+  if (err != ESP_OK) {
+    Serial.printf("PID 0x%02X send failed: %d\n", pid, err);
+    return false;
   }
-  Serial.println();
+  return true;
 }
 
-void updateOledWithFrame() {
-  String idLine = "ID: 0x" + String(lastId, HEX);
-  idLine.toUpperCase();
+void handlePid49(uint8_t A, uint8_t B, uint32_t respId) {
+  lastRespId = respId;
+  lastA = A;
+  lastB = B;
 
-  String typeLine = String(lastExt ? "EXT" : "STD") + " DLC:" + String(lastLen);
-  String data1 = formatBytesLine(lastData, lastLen, 0, 4);
-  String data2 = formatBytesLine(lastData, lastLen, 4, 8);
-  String countLine = "Frames: " + String(frameCount);
+  app = A * 100.0f / 255.0f;
+  seen49 = true;
+  lastFrameMs = millis();
 
-  drawOledStatus(
-    "OBD CAN RX",
-    idLine,
-    typeLine,
-    data1,
-    data2
-  );
+  if (calibratingAppMin) {
+    countApp++;
 
-  // Alternate info every so often if you want frame count shown instead
-  // drawOledStatus("OBD CAN RX", idLine, typeLine, data1, countLine);
+    if (app < learnedAppMin) {
+      learnedAppMin = app;
+    }
+
+    if (countApp >= 5) {
+      calibratingAppMin = false;
+      gotAppDuringCalibration = true;
+
+      effectiveAppMin = learnedAppMin + 0.5f;
+      appMax = effectiveAppMin + 0.05f * (80.0f - effectiveAppMin);
+
+      // Safety fallback so range stays sane
+      if (appMax < effectiveAppMin + 1.0f) {
+        appMax = effectiveAppMin + 1.0f;
+      }
+    }
+  }
+
+  if (seen49 && !calibratingAppMin) {
+    vin = mapPedalToVoltage(app);
+  } else {
+    vin = minV;
+  }
+
+  pwm = (int)(vin * 255.0f / 3.3f + 0.5f);
+  if (pwm < 0) pwm = 0;
+  if (pwm > pwmMax) pwm = pwmMax;
+}
+
+void processCanFrames() {
+  twai_message_t message;
+
+  while (twai_receive(&message, 0) == ESP_OK) {
+    if (message.extd) continue;
+    if (message.data_length_code != 8) continue;
+    if (message.identifier < 0x7E8 || message.identifier > 0x7EF) continue;
+
+    uint8_t* buf = message.data;
+
+    if (buf[1] != 0x41) continue;  // Mode 01 response
+
+    uint8_t pid = buf[2];
+    uint8_t A = buf[3];
+    uint8_t B = buf[4];
+
+    if (pid == 0x49) {
+      handlePid49(A, B, message.identifier);
+
+      Serial.print("APP resp ID: 0x");
+      Serial.print(message.identifier, HEX);
+      Serial.print("  APP: ");
+      Serial.print(app, 2);
+      Serial.print("%  Vin: ");
+      Serial.print(vin, 3);
+      Serial.print("  PWM: ");
+      Serial.println(pwm);
+    }
+  }
+}
+
+void updateDisplay() {
+  String line1 = "APP / Pedal";
+  String line2 = "APP: " + String(app, 1) + "%";
+  String line3 = "Vin: " + String(vin, 3) + "V";
+  String line4 = "PWM: " + String(pwm) + " #" + String(n);
+
+  String line5;
+  if (calibratingAppMin) {
+    line5 = "Cal min... " + String(countApp);
+  } else {
+    line5 = "Min:" + String(effectiveAppMin, 1) + " Max:" + String(appMax, 1);
+  }
+
+  drawOledStatus(line1, line2, line3, line4, line5);
 }
 
 void setup() {
@@ -129,21 +238,21 @@ void setup() {
     "Starting...",
     "Heltec OLED OK",
     "Init CAN 500k",
-    "Listen Only"
+    "OBD APP Reader"
   );
 
   Serial.println();
-  Serial.println("Heltec OBD-II CAN Sniffer Starting...");
+  Serial.println("Heltec OBD-II CAN Reader Starting...");
 
-  canStarted = startCAN500kListenOnly();
+  canStarted = startCAN500kNormal();
 
   if (canStarted) {
-    Serial.println("CAN started at 500 kbps, listen-only mode");
+    Serial.println("CAN started at 500 kbps, NORMAL mode");
     drawOledStatus(
       "CAN Started",
       "500 kbps",
-      "Listen Only",
-      "Waiting frames..."
+      "Normal Mode",
+      "Request PID 49"
     );
   } else {
     Serial.println("CAN start failed");
@@ -161,33 +270,32 @@ void loop() {
     delay(1000);
     return;
   }
+unsigned long now = millis();
 
-  twai_message_t message;
-  esp_err_t result = twai_receive(&message, pdMS_TO_TICKS(100));
-
-  if (result == ESP_OK) {
-    frameCount++;
-    lastId = message.identifier;
-    lastLen = message.data_length_code;
-    lastExt = message.extd;
-    gotFrame = true;
-
-    for (int i = 0; i < 8; i++) {
-      lastData[i] = (i < message.data_length_code) ? message.data[i] : 0;
-    }
-
-    printFrame(message);
-    updateOledWithFrame();
+  // Send APP request every 100 ms
+  if (now - lastReqMs >= 100) {
+    lastReqMs = now;
+    sendPid(0x49);   // Accelerator Pedal Position D
   }
 
-  // If no frames after startup, keep a waiting message alive
-  if (!gotFrame && millis() - lastStatusUpdate > 1000) {
-    lastStatusUpdate = millis();
-    drawOledStatus(
-      "CAN Started",
-      "500 kbps",
-      "Listen Only",
-      "Waiting frames..."
-    );
+  // Read all pending frames
+  processCanFrames();
+
+  // Update OLED about 5 times/sec
+  if (now - lastDisplayMs >= 200) {
+    lastDisplayMs = now;
+    n++;
+    if (n > 99) n = 0;
+
+    if (!seen49) {
+      drawOledStatus(
+        "APP / Pedal",
+        "Waiting PID 49...",
+        "Check key ON",
+        "Engine may need RUN"
+      );
+    } else {
+      updateDisplay();
+    }
   }
 }
