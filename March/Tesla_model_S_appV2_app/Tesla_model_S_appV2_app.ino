@@ -29,7 +29,7 @@ static SSD1306Wire display(0x3c, 500000, SDA_OLED, SCL_OLED, GEOMETRY_128_64, RS
 // ---------------- Timing ----------------
 unsigned long lastReqMs = 0;
 unsigned long lastDisplayMs = 0;
-unsigned long lastFrameMs = 0;
+//unsigned long lastFrameMs = 0;
 unsigned long n = 0;
 
 bool canStarted = false;
@@ -38,12 +38,12 @@ bool canStarted = false;
 float app = 0.0f;
 bool seen49 = false;
 
-float appMin = 14.9f;          // fallback default
+//float appMin = 14.9f;          // fallback default
 float appMax = 18.0f;          // will be auto-adjusted after calibration
 float learnedAppMin = 1000.0f;
 float effectiveAppMin = 14.9f;
 bool calibratingAppMin = true;
-bool gotAppDuringCalibration = false;
+//bool gotAppDuringCalibration = false;
 int countApp = 0;
 
 float minV = 0.35f;
@@ -51,9 +51,17 @@ float vin = 0.35f;
 int pwm = 0;
 int pwmMax = 200;
 
-uint32_t lastRespId = 0x000;
-uint8_t lastA = 0;
-uint8_t lastB = 0;
+// function prototypes
+const char* twaiStateName(twai_state_t s);
+void printTwaiStatus(const char* tag);
+void readTwaiAlerts();
+void recoverTwaiIfNeeded();
+bool sendPid(uint8_t pid);
+void handlePid49(uint8_t A, uint8_t B, uint32_t respId);
+void processCanFrames();
+void updateDisplay();
+float mapPedalToVoltage(float appRaw);
+bool startCAN500kNormal();
 
 // ---------------- Helper functions ----------------
 void VextON(void) {
@@ -93,6 +101,14 @@ bool startCAN500kNormal() {
   twai_timing_config_t t_config = TWAI_TIMING_CONFIG_500KBITS();
   twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
 
+  g_config.alerts_enabled =
+      TWAI_ALERT_TX_FAILED |
+      TWAI_ALERT_TX_SUCCESS |
+      TWAI_ALERT_BUS_ERROR |
+      TWAI_ALERT_BUS_OFF |
+      TWAI_ALERT_BUS_RECOVERED |
+      TWAI_ALERT_RECOVERY_IN_PROGRESS;
+
   esp_err_t err = twai_driver_install(&g_config, &t_config, &f_config);
   if (err != ESP_OK) {
     Serial.printf("twai_driver_install failed: %d\n", err);
@@ -106,10 +122,33 @@ bool startCAN500kNormal() {
     return false;
   }
 
+  printTwaiStatus("after start");
   return true;
 }
 
+void readTwaiAlerts() {
+  uint32_t alerts = 0;
+  if (twai_read_alerts(&alerts, 0) == ESP_OK && alerts != 0) {
+    Serial.print("ALERTS:");
+    if (alerts & TWAI_ALERT_TX_SUCCESS) Serial.print(" TX_SUCCESS");
+    if (alerts & TWAI_ALERT_TX_FAILED) Serial.print(" TX_FAILED");
+    if (alerts & TWAI_ALERT_BUS_ERROR) Serial.print(" BUS_ERROR");
+    if (alerts & TWAI_ALERT_BUS_OFF) Serial.print(" BUS_OFF");
+    if (alerts & TWAI_ALERT_RECOVERY_IN_PROGRESS) Serial.print(" RECOVERING");
+    if (alerts & TWAI_ALERT_BUS_RECOVERED) Serial.print(" BUS_RECOVERED");
+    Serial.println();
+  }
+}
+
 bool sendPid(uint8_t pid) {
+  twai_status_info_t st;
+  if (twai_get_status_info(&st) == ESP_OK) {
+    if (st.state != TWAI_STATE_RUNNING) {
+      Serial.printf("TWAI not running before TX: %s\n", twaiStateName(st.state));
+      return false;
+    }
+  }
+
   twai_message_t msg = {};
   msg.identifier = 0x7DF;
   msg.extd = 0;
@@ -131,19 +170,21 @@ bool sendPid(uint8_t pid) {
   esp_err_t err = twai_transmit(&msg, pdMS_TO_TICKS(50));
   if (err != ESP_OK) {
     Serial.printf("PID 0x%02X send failed: %d\n", pid, err);
+    printTwaiStatus("tx fail");
     return false;
   }
+
   return true;
 }
 
 void handlePid49(uint8_t A, uint8_t B, uint32_t respId) {
-  lastRespId = respId;
-  lastA = A;
-  lastB = B;
+  // lastRespId = respId;
+  // lastA = A;
+  // lastB = B;
 
   app = A * 100.0f / 255.0f;
   seen49 = true;
-  lastFrameMs = millis();
+  //lastFrameMs = millis();
 
   if (calibratingAppMin) {
     countApp++;
@@ -154,7 +195,7 @@ void handlePid49(uint8_t A, uint8_t B, uint32_t respId) {
 
     if (countApp >= 5) {
       calibratingAppMin = false;
-      gotAppDuringCalibration = true;
+      //gotAppDuringCalibration = true;
 
       effectiveAppMin = learnedAppMin + 0.5f;
       appMax = effectiveAppMin + 0.05f * (80.0f - effectiveAppMin);
@@ -205,6 +246,44 @@ void processCanFrames() {
       Serial.print("  PWM: ");
       Serial.println(pwm);
     }
+  }
+}
+
+const char* twaiStateName(twai_state_t s) {
+  switch (s) {
+    case TWAI_STATE_STOPPED: return "STOPPED";
+    case TWAI_STATE_RUNNING: return "RUNNING";
+    case TWAI_STATE_BUS_OFF: return "BUS_OFF";
+    case TWAI_STATE_RECOVERING: return "RECOVERING";
+    default: return "UNKNOWN";
+  }
+}
+
+void printTwaiStatus(const char* tag) {
+  twai_status_info_t st;
+  if (twai_get_status_info(&st) == ESP_OK) {
+    Serial.printf(
+      "[%s] state=%s tx_err=%u rx_err=%u tx_failed=%u bus_err=%u\n",
+      tag,
+      twaiStateName(st.state),
+      st.tx_error_counter,
+      st.rx_error_counter,
+      st.tx_failed_count,
+      st.bus_error_count
+    );
+  }
+}
+
+void recoverTwaiIfNeeded() {
+  twai_status_info_t st;
+  if (twai_get_status_info(&st) != ESP_OK) return;
+
+  if (st.state == TWAI_STATE_BUS_OFF) {
+    Serial.println("TWAI BUS-OFF -> initiate recovery");
+    twai_initiate_recovery();
+  } else if (st.state == TWAI_STATE_STOPPED) {
+    Serial.println("TWAI STOPPED -> restart");
+    twai_start();
   }
 }
 
@@ -270,16 +349,22 @@ void loop() {
     delay(1000);
     return;
   }
-unsigned long now = millis();
+
+  unsigned long now = millis();
+
+  recoverTwaiIfNeeded();
+
 
   // Send APP request every 100 ms
-  if (now - lastReqMs >= 100) {
+  if (now - lastReqMs >= 200) {
     lastReqMs = now;
     sendPid(0x49);   // Accelerator Pedal Position D
   }
 
   // Read all pending frames
   processCanFrames();
+
+  readTwaiAlerts();
 
   // Update OLED about 5 times/sec
   if (now - lastDisplayMs >= 200) {
@@ -288,11 +373,17 @@ unsigned long now = millis();
     if (n > 99) n = 0;
 
     if (!seen49) {
+      twai_status_info_t st;
+      String stateLine = "State: ?";
+      if (twai_get_status_info(&st) == ESP_OK) {
+        stateLine = "State: " + String(twaiStateName(st.state));
+      }
+
       drawOledStatus(
         "APP / Pedal",
         "Waiting PID 49...",
-        "Check key ON",
-        "Engine may need RUN"
+        stateLine,
+        "Check key ON"
       );
     } else {
       updateDisplay();
