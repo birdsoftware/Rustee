@@ -5,8 +5,8 @@
 // | --------- | ------------ |
 // | 3V3       | 3V3          | PRG Side pin 2
 // | GND       | GND          | PRG Side pin 1
-// | CTX       | GPIO13       | PRG Side
-// | CRX       | GPIO17       | RSI side
+// | CTX       | GPIO19      | 
+// | CRX       | GPIO20       | 
 // | CANH      | OBD pin 6    |
 // | CANL      | OBD pin 14   |
 
@@ -21,10 +21,10 @@ static SSD1306Wire display(0x3c, 500000, SDA_OLED, SCL_OLED, GEOMETRY_128_64, RS
 
 // ---------------- CAN pins ----------------
 // ESP32 -> transceiver
-// GPIO13 = TX to WCMCU CTX
-// GPIO17 = RX from WCMCU CRX
-#define CAN_TX_PIN GPIO_NUM_13
-#define CAN_RX_PIN GPIO_NUM_17
+// GPIO19 = TX to WCMCU CRX
+// GPIO20 = RX from WCMCU CTX
+#define CAN_TX_PIN GPIO_NUM_19
+#define CAN_RX_PIN GPIO_NUM_20
 
 // ---------------- Timing ----------------
 unsigned long lastReqMs = 0;
@@ -355,8 +355,8 @@ void loop() {
   recoverTwaiIfNeeded();
 
 
-  // Send APP request every 100 ms
-  if (now - lastReqMs >= 200) {
+  // Send APP request every 500 ms
+  if (now - lastReqMs >= 500) {
     lastReqMs = now;
     sendPid(0x49);   // Accelerator Pedal Position D
   }
