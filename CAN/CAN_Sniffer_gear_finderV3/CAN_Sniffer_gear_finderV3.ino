@@ -1,3 +1,4 @@
+//works great for F350 2010
 #include <SPI.h>
 #include <mcp_can.h>
 
