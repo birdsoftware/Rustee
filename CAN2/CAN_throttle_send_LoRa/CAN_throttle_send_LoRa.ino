@@ -1,4 +1,31 @@
 // This runs on an a arduino nano. Nano UART analog write to LoRa
+// 1. 🚘 Reads Car Data (OBD-II via CAN)
+//    Sends requests for (RPM, speed, pedal, gears, etc.) from ECU
+//    Extract pedal position (APP)
+//    Extract Gear Selector (P,R,N,D)
+// 2. 🦶 Learns Pedal “Resting Position” at Startup
+//    During first few readings: Finds the lowest pedal value (foot off pedal)
+//    Stored as effectiveAppMin
+//    Adds a small buffer (+0.5)
+//    This is your zero throttle baseline
+// 3. 🎯 Sets the Max Range Automatically
+//    After calibration: appMax = effectiveAppMin + 0.05f * (80.0f - effectiveAppMin);
+//    It only uses ~5% of full pedal range
+//    This compresses pedal input into a smaller usable window
+// 4. 🔄 Convert pedal → voltage
+//    Pedal min = 0.35v, pedal max 3.3v
+//    Smooth linear scaling
+// 5. ⚡ Convert voltage → PWM 
+//    pwm = vin * 255 / 3.3
+// 6. 🎛️ Limit PWM with a knob (potentiometer)
+//    Potentiometer Limits Output
+//    Acts like a manual power limiter / safety cap
+// 7. Toggle Digital output 1 and 2
+//    If gear selected is Drive, Digital Output 1 High & 2 is Low
+//    If gear selected is Reverse, Digital Output 2 High & 1 is Low
+//    If gear selected is not R or D, Digital Output 2 Low & 1 is Low
+// 8. 📡 Sends Output (LoRa)
+//    Every 200ms
 
 // CAN ODB-II -> [HW187] -> [Arduino nano] -> [LoRa V3] ~.~.~> [LoRa V2]
 // CAN ODB-II GND and 12V+ -> [DC-DC Voltage adjuster] -> 5V for nano and LoRa
@@ -71,9 +98,8 @@ float rpm=0, mph=0, loadPct=0, ectF=0, iatF=0, volts=0, fuelPct=0, maf=0, app=0,
 bool seen0C=false, seen0D=false, seen04=false, seen05=false, seen0F=false, seen42=false, seen2F=false, seen49=false, seen11=false;
 
 // Pedal calibration
-float appMin = 14.9f;//15.3//15.69,15.29 // will be replaced during first second if APP is seen
+//float appMin = 14.9f;//15.3//15.69,15.29 // will be replaced during first second if APP is seen
 float appMax = 18.0f;//80.4f; //78.8 //adjust the max V
-const float APP_EPSILON = 0.15f; // Prevent tiny noise from constantly changing min/max
 
 // Output values
 float minV = 0.35f;
