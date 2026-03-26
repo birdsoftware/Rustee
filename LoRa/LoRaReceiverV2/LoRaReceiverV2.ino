@@ -1,6 +1,15 @@
-// B.Bird 3.16.26 Update
+// Output PWM Voltage mapped to APP on GPIO 25
+//
+// Update B.Bird 3.16.26 
 // Removed PWM and using DAC output for pure analog
-// CC was here
+//
+// Update: B.Bird 3.25.26
+// Added Parser for Gear (P,N,D,R,M,1,2,?)
+// GPIO 12 HIGH only in Drive
+// GPIO 13 HIGH only in Revers
+//
+// Update: B.Bird 3.26.26
+// Add M,2,1 Output = HIGH
 
 #include "LoRaWan_APP.h"
 #include "Arduino.h"
@@ -33,6 +42,10 @@
 #define OLED_SCL 15
 #define OLED_RST 16
 
+const int APP_PWM_OUT = 25;  // Accelerator Pedal Position Mapped to PWM
+const int GEAR_D_OUT = 12;   // HIGH only in Drive
+const int GEAR_R_OUT = 13;   // HIGH only in Reverse
+
 static SSD1306Wire display(0x3C, 400000, OLED_SDA, OLED_SCL, GEOMETRY_128_64, OLED_RST);
 
 char rxpacket[BUFFER_SIZE];
@@ -50,6 +63,19 @@ bool lora_idle = true;
 // const int PWM_PIN = 25;      // pick a GPIO that isn't used by LoRa/OLED
 // const int PWM_FREQ = 5000;   // PWM frequency
 // const int PWM_RES  = 8;      // 8-bit resolution -> 0..255 duty
+
+void updateGearOutputs(char gear) {
+  if (gear == 'D' || gear == 'M' || gear == '1' || gear == '2') {
+    digitalWrite(GEAR_D_OUT, HIGH);
+    digitalWrite(GEAR_R_OUT, LOW);
+  } else if (gear == 'R') {
+    digitalWrite(GEAR_D_OUT, LOW);
+    digitalWrite(GEAR_R_OUT, HIGH);
+  } else {
+    digitalWrite(GEAR_D_OUT, LOW);
+    digitalWrite(GEAR_R_OUT, LOW);
+  }
+}
 
 // ---- Timeout (no packets recieved for 1 second) 
 unsigned long lastPacketTime = 0;
@@ -114,10 +140,12 @@ void setup() {
                     LORA_IQ_INVERSION_ON,
                     true);
 
-  // ---- PWM init ----
-  // ledcAttach(PWM_PIN, PWM_FREQ, PWM_RES);
-  // lastPacketTime = millis(); //for timed out
-  // ledcWrite(PWM_PIN, 0);                
+  // ---- GEAR init ----          
+  pinMode(GEAR_D_OUT, OUTPUT);
+  pinMode(GEAR_R_OUT, OUTPUT);
+
+  digitalWrite(GEAR_D_OUT, LOW);
+  digitalWrite(GEAR_R_OUT, LOW);      
 }
 
 void loop() {
@@ -131,7 +159,7 @@ void loop() {
   //timed out
   if (!timedOut && (millis() - lastPacketTime > SIGNAL_TIMEOUT_MS)) {
     //ledcWrite(PWM_PIN, 0);
-    dacWrite(25, 0);
+    dacWrite(APP_PWM_OUT, 0);
     timedOut = true;
     //Serial.println("0 LoRa timeout - PWM forced to 0");
     drawOledStatus("LoRa timeout - PWM forced to 0");
@@ -150,9 +178,9 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi_in, int8_t snr) {
   else signalQuality = "Weak";
 
   if (snr > 8) linkQuality = "Excellent";
-else if (snr > 3) linkQuality = "Good";
-else if (snr > 0) linkQuality = "Fair";
-else linkQuality = "Weak";
+  else if (snr > 3) linkQuality = "Good";
+  else if (snr > 0) linkQuality = "Fair";
+  else linkQuality = "Weak";
 
   // prevent overflow
   if (size >= BUFFER_SIZE) size = BUFFER_SIZE - 1;
@@ -165,16 +193,25 @@ else linkQuality = "Weak";
   Serial.printf("\r\nreceived packet \"%s\" with rssi %d , length %d\r\n",
                 rxpacket, lastRssi, rxSize);
 
-  // PWM output packet contains an integer like "137"
+  // PWM is the first number in the packet like "137"
   int pwm = atoi(rxpacket);          // convert string to int
-  
   pwm = constrain(pwm, 0, 255);      // your allowed range
-
-  //ledcWrite(PWM_PIN, pwm);            // output PWM duty (0..255)
+  //ledcWrite(PWM_PIN, pwm);         // output PWM duty (0..255)
   dacWrite(25, pwm);//
 
+  // Default if not found
+  char gear = '?';
+
+  // Parse the gear. Look for "G: "
+  char *g = strstr(rxpacket, "G: ");
+  if (g != NULL) {
+    gear = *(g + 3);   // character after "G: "
+  }
+
+  updateGearOutputs(gear);
+
   Serial.printf("PWM set to: %d\n", pwm);
-  //end PWM              
+  Serial.printf("Gear: %c\n", gear);             
 
   // Show on OLED
   drawOledStatus("RX Packet:",

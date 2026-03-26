@@ -13,6 +13,11 @@
 
 #define BUFFER_SIZE 128
 
+const char* gears[] = {"P", "R", "N", "D", "M", "1", "2", "?"};
+const int GEAR_COUNT = sizeof(gears) / sizeof(gears[0]);
+int gearIndex = 0;
+String currentGear = "P";
+
 // OLED
 static SSD1306Wire display(0x3c, 500000, SDA_OLED, SCL_OLED, GEOMETRY_128_64, RST_OLED);
 
@@ -114,12 +119,20 @@ void loop() {
 
     if (n > 99) n = 0;
 
-    // Exact format requested
+    currentGear = gears[gearIndex];
+
     String payload =
-      String(pwm) + " I: " +
-      String(vin, 3) + " O: " +
-      String(discreteVin, 3) + " #" +
-      String(n);
+      String(pwm) +
+      " G: " + currentGear +
+      " I: " + String(vin, 3) +
+      " #" + String(n);
+
+    // Exact format requested
+    // String payload =
+    //   String(pwm) + " I: " +
+    //   String(vin, 3) + " O: " +
+    //   String(discreteVin, 3) + " #" +
+    //   String(n);
 
     payload.toCharArray(txpacket, BUFFER_SIZE);
 
@@ -129,7 +142,8 @@ void loop() {
     drawOledStatus(
       "LoRa Test TX",
       "PWM: " + String(pwm),
-      "I: " + String(vin, 3) + " O: " + String(discreteVin, 3),
+      "G: " + currentGear + " I: " + String(vin, 3),
+      //"I: " + String(vin, 3) + " O: " + String(discreteVin, 3),
       "#" + String(n)
     );
 
@@ -142,7 +156,12 @@ void loop() {
       vin = VIN_MIN;
     }
 
+    gearIndex++;
+    if (gearIndex >= GEAR_COUNT) {
+      gearIndex = 0;
+    }
+
     n++;
-    delay(200);
+    delay(1000);
   }
 }
