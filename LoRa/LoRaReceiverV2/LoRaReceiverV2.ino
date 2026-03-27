@@ -6,7 +6,7 @@
 // Update: B.Bird 3.25.26
 // Added Parser for Gear (P,N,D,R,M,1,2,?)
 // GPIO 12 HIGH only in Drive
-// GPIO 13 HIGH only in Revers
+// GPIO 13 HIGH only in R
 //
 // Update: B.Bird 3.26.26
 // Add M,2,1 Output = HIGH
