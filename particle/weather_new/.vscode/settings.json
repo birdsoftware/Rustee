@@ -1,0 +1,10 @@
+{
+    "extensions.ignoreRecommendations": true,
+    "C_Cpp.default.configurationProvider": "particle.particle-vscode-core",
+    "files.associations": {
+        "*.ino": "cpp"
+    },
+    "particle.targetDevice": "cowboyA",
+    "particle.targetPlatform": "argon",
+    "particle.firmwareVersion": "6.3.5"
+}
