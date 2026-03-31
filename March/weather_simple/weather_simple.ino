@@ -9,6 +9,12 @@
 // CS  -> not used / internally tied
 // SPI TFT LCD, ST7789-compatible, no CS breakout, custom/nonstandard geometry.
 
+//DHT11
+//left pin (S) D2
+//middle 5V
+//right GND
+
+
 #include <Adafruit_GFX.h>
 #include <Adafruit_ST7789.h>
 #include <SPI.h>
