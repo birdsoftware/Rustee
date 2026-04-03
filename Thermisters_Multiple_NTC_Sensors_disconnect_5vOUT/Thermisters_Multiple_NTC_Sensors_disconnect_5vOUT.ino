@@ -53,7 +53,7 @@ void loop() {
   float bestTemp = 9999.0;
   bool anyValid = false;
 
-  for (int pin = A0; pin <= A5; pin++) {
+  for (int pin = A0; pin <= A3; pin++) {
     //Temperature (same math, just applied to each pin)
     VRT = analogRead(pin);  
 

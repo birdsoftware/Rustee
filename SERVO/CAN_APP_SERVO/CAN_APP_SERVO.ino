@@ -1,16 +1,16 @@
 // Control Arduino Nano 5v
 // tested 3/31/26
 //
-// INPUT HW-184 wiring
+// INPUT HW-184 wiring to PCB + Nano
 // HW-184 CAN-H -> ODB-II Pin 6 CAN High
 // HW-184 CAN-L -> ODB-II Pin 14 CAN LOW
-// HW-184 Vcc -> 5V Nano
-// HW-184 GND -> GND Nano
-// HW-184 CS -> D10 Nano
-// HW-184 SO -> D12 Nano
-// HW-184 SI -> D11 Nano
-// HW-184 SCK -> D13 Nano
-// HW-184 INT -> D2 Nano
+// HW-184 Vcc -> 5V Nano E12
+// HW-184 GND -> GND Nano E14
+// HW-184 SO -> D12 Nano F1
+// HW-184 SI -> D11 Nano F2
+// HW-184 CS -> D10 Nano F3
+// HW-184 SCK -> D13 Nano E1
+// HW-184 INT -> D2 Nano F11
 //
 // ODB-II wiring
 // ODB-II pin 16 12V -> +IN DC-DC Converter
@@ -48,12 +48,40 @@ float app = 0.0f;
 bool seen49 = false;
 
 // Servo range
-const int SERVO_MIN_ANGLE = 0;
-const int SERVO_MAX_ANGLE = 45;   // change to 90 if you want 1/4 turn = 90°
+const int SERVO_MIN_ANGLE = 5;//0;
+const int SERVO_MAX_ANGLE = 40;//45;
+
+// --- Calibration / sensitivity ---
+float appZero = 0.0f;                 // learned pedal rest value
+bool appZeroLearned = false;
+float appFullScaleDelta = 5.0f;       // pedal movement above rest needed for full 45°
+int appSamples = 0;
+float appSum = 0.0f;
+
+// Optional noise deadband above rest
+float appDeadband = 0.2f;             // ignore tiny changes near rest
 
 void sendPid(uint8_t pid) {
   byte req[8] = { 0x02, 0x01, pid, 0, 0, 0, 0, 0 };
   CAN0.sendMsgBuf(0x7DF, 0, 8, req);
+}
+
+int appToServoAngle(float appPercent) {
+  // Keep a real zero
+  float delta = appPercent - appZero;
+
+  // Deadband so tiny noise doesn't move servo
+  if (delta < appDeadband) {
+    delta = 0.0f;
+  }
+
+  // Scale so a small pedal movement hits full angle
+  float scaled = (delta / appFullScaleDelta) * SERVO_MAX_ANGLE;
+
+  int servoAngle = (int)(scaled + 0.5f);
+  servoAngle = constrain(servoAngle, SERVO_MIN_ANGLE, SERVO_MAX_ANGLE);
+
+  return servoAngle;
 }
 
 void setup() {
@@ -70,6 +98,8 @@ void setup() {
   }
 
   CAN0.setMode(MCP_NORMAL);
+
+  Serial.println("Starting... leave pedal at rest for calibration");
 }
 
 void loop() {
@@ -91,20 +121,35 @@ void loop() {
     if (CAN0.readMsgBuf(&rxId, &len, buf) != CAN_OK) break;
     if (len != 8) continue;
     if (rxId < 0x7E8 || rxId > 0x7EF) continue;
-    if (buf[1] != 0x41) continue;  // Mode 01 response
+    if (buf[1] != 0x41) continue;
 
     uint8_t pid = buf[2];
     uint8_t A   = buf[3];
 
     if (pid == 0x49) {
-      app = A * 100.0f / 255.0f;   // APP percent
+      app = A * 100.0f / 255.0f;
       seen49 = true;
 
-      // Map APP 0-100% to servo angle 0-45°
-      int servoAngle = map((int)app, 0, 100, SERVO_MIN_ANGLE, SERVO_MAX_ANGLE);
-      servoAngle = constrain(servoAngle, SERVO_MIN_ANGLE, SERVO_MAX_ANGLE);
+      // Learn resting APP from first 20 samples
+      if (!appZeroLearned) {
+        appSum += app;
+        appSamples++;
 
-      myServo.write(servoAngle);
+        if (appSamples >= 20) {
+          appZero = appSum / appSamples;
+          appZeroLearned = true;
+
+          Serial.print("Learned APP zero: ");
+          Serial.println(appZero, 2);
+        }
+      }
+
+      if (appZeroLearned) {
+        int servoAngle = appToServoAngle(app);
+        myServo.write(servoAngle);//SERVO_MIN_ANGLE SERVO_MAX_ANGLE
+      } else {
+        myServo.write(0);
+      }
     }
   }
 
@@ -113,11 +158,14 @@ void loop() {
     lastPrintMs = now;
 
     if (seen49) {
-      int servoAngle = map((int)app, 0, 100, SERVO_MIN_ANGLE, SERVO_MAX_ANGLE);
-      servoAngle = constrain(servoAngle, SERVO_MIN_ANGLE, SERVO_MAX_ANGLE);
+      int servoAngle = appZeroLearned ? appToServoAngle(app) : 0;
 
       Serial.print("APP: ");
-      Serial.print(app, 1);
+      Serial.print(app, 2);
+      Serial.print("%  Zero: ");
+      Serial.print(appZero, 2);
+      Serial.print("%  Delta: ");
+      Serial.print(app - appZero, 2);
       Serial.print("%  Servo: ");
       Serial.println(servoAngle);
     } else {
