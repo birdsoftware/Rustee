@@ -1,15 +1,31 @@
-// Output PWM Voltage mapped to APP on GPIO 25
-//
-// Update B.Bird 3.16.26 
-// Removed PWM and using DAC output for pure analog
-//
+// LoRa recieves UART APP and Selected Gear. OUTPUT Gear and APP voltages
+
+// Update B.Bird 4.6.26 Switched LoRa V2 for V3
+// Removing DAC going back to PWM
+
+// Update: B.Bird 3.26.26
+// Add M,2,1 Output = HIGH
+
 // Update: B.Bird 3.25.26
 // Added Parser for Gear (P,N,D,R,M,1,2,?)
 // GPIO 12 HIGH only in Drive
 // GPIO 13 HIGH only in R
-//
-// Update: B.Bird 3.26.26
-// Add M,2,1 Output = HIGH
+
+// Update B.Bird 3.16.26 
+// Removed PWM and using DAC output for pure analog voltage 0 - 3.3V
+
+// GEAR_R_OUT = 5 // V2: pin 12 -> GPIO 1 R
+// GEAR_D_OUT = 6 // V2: pin 13 -> GPIO 2 D
+// APP_PWM_OUT = 7 // pin 25 -> app out
+// GND -> GND lora
+// 5v -> 5v lora
+
+// APP (analog via PWM + filter)
+// GPIO7 ── 1k resistor ──┬──→ APP signal
+//                        |
+//                      1µF
+//                        |
+//                       GND
 
 #include "LoRaWan_APP.h"
 #include "Arduino.h"
@@ -32,56 +48,73 @@
 #define LORA_FIX_LENGTH_PAYLOAD_ON false
 #define LORA_IQ_INVERSION_ON false
 
-#define BUFFER_SIZE 30
+#define BUFFER_SIZE 64 //30
 
-#ifndef Vext
-#define Vext 21
-#endif
+//V2 OLED
+// #ifndef Vext
+// #define Vext 21
+// #endif
 
-#define OLED_SDA 4
-#define OLED_SCL 15
-#define OLED_RST 16
+// #define OLED_SDA 4
+// #define OLED_SCL 15
+// #define OLED_RST 16
 
-const int APP_PWM_OUT = 25;  // Accelerator Pedal Position Mapped to PWM
-const int GEAR_D_OUT = 12;   // HIGH only in Drive
-const int GEAR_R_OUT = 13;   // HIGH only in Reverse
+const int APP_PWM_OUT = 7;  // Accelerator Pedal Position out
+const int GEAR_D_OUT = 6;   // HIGH only in Drive
+const int GEAR_R_OUT = 5;   // HIGH only in Reverse
+const int APP_PWM_FREQ = 20000;
+const int APP_PWM_RES  = 8;
 
-static SSD1306Wire display(0x3C, 400000, OLED_SDA, OLED_SCL, GEOMETRY_128_64, OLED_RST);
+//static SSD1306Wire display(0x3C, 400000, OLED_SDA, OLED_SCL, GEOMETRY_128_64, OLED_RST);//V2
+static SSD1306Wire display(0x3c, 500000, SDA_OLED, SCL_OLED, GEOMETRY_128_64, RST_OLED);
+static RadioEvents_t RadioEvents;
 
 char rxpacket[BUFFER_SIZE];
 
-static RadioEvents_t RadioEvents;
+bool lora_idle = true;
+// ---- Timeout (no packets recieved for 1 second) 
+unsigned long lastPacketTime = 0;
+const unsigned long SIGNAL_TIMEOUT_MS = 2000;
+bool timedOut = true;
 
 int16_t lastRssi = 0;
 int16_t rxSize = 0;
 String signalQuality;
 String linkQuality;
 
-bool lora_idle = true;
-
 // ---- PWM output (ESP32 LEDC) ----
 // const int PWM_PIN = 25;      // pick a GPIO that isn't used by LoRa/OLED
 // const int PWM_FREQ = 5000;   // PWM frequency
 // const int PWM_RES  = 8;      // 8-bit resolution -> 0..255 duty
 
+//V3 OLED Helper
+void VextON(void)
+{
+  pinMode(Vext, OUTPUT);
+  digitalWrite(Vext, LOW);
+}
+
+void clearOutputs() {
+  //dacWrite(APP_PWM_OUT, 0);
+  ledcWrite(APP_PWM_OUT, 0);
+  digitalWrite(GEAR_D_OUT, LOW);
+  digitalWrite(GEAR_R_OUT, LOW);
+}
+
 void updateGearOutputs(char gear) {
+  digitalWrite(GEAR_D_OUT, LOW);
+  digitalWrite(GEAR_R_OUT, LOW);
+
   if (gear == 'D' || gear == 'M' || gear == '1' || gear == '2') {
     digitalWrite(GEAR_D_OUT, HIGH);
-    digitalWrite(GEAR_R_OUT, LOW);
   } else if (gear == 'R') {
-    digitalWrite(GEAR_D_OUT, LOW);
     digitalWrite(GEAR_R_OUT, HIGH);
-  } else {
+  } else if (gear == 'P') {
     digitalWrite(GEAR_D_OUT, LOW);
     digitalWrite(GEAR_R_OUT, LOW);
   }
-}
 
-// ---- Timeout (no packets recieved for 1 second) 
-unsigned long lastPacketTime = 0;
-const unsigned long SIGNAL_TIMEOUT_MS = 2000;
-bool timedOut = true;
-//
+}
 
 void drawOledStatus(const String& line1, const String& line2 = "", const String& line3 = "", const String& line4 = "") {
   display.clear();
@@ -98,23 +131,35 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi_in, int8_t snr);
 void setup() {
   Serial.begin(115200);
   delay(200);
+       
+  pinMode(GEAR_D_OUT, OUTPUT);
+  pinMode(GEAR_R_OUT, OUTPUT);
 
   // Start MCU/Radio stack
   Mcu.begin(HELTEC_BOARD, SLOW_CLK_TPYE);
 
+  ledcAttach(APP_PWM_OUT, APP_PWM_FREQ, APP_PWM_RES);
+  clearOutputs();
+
   // ---- OLED bring-up (known-good for V2) ----
-  pinMode(Vext, OUTPUT);
-  digitalWrite(Vext, LOW);     // LOW = ON for your board
-  delay(200);
+  // pinMode(Vext, OUTPUT);
+  // digitalWrite(Vext, LOW);     // LOW = ON for your board
+  // delay(200);
 
-  pinMode(OLED_RST, OUTPUT);
-  digitalWrite(OLED_RST, LOW);
-  delay(20);
-  digitalWrite(OLED_RST, HIGH);
-  delay(50);
+  // pinMode(OLED_RST, OUTPUT);
+  // digitalWrite(OLED_RST, LOW);
+  // delay(20);
+  // digitalWrite(OLED_RST, HIGH);
+  // delay(50);
 
-  Wire.begin(OLED_SDA, OLED_SCL);
-  delay(10);
+  // Wire.begin(OLED_SDA, OLED_SCL);
+  // delay(10);
+  //----
+
+  // OLED V3 --
+  VextON();
+  delay(100);
+  // ---
 
   display.init();
   drawOledStatus("LoRa RX Ready", "Waiting for packets...");
@@ -140,12 +185,8 @@ void setup() {
                     LORA_IQ_INVERSION_ON,
                     true);
 
-  // ---- GEAR init ----          
-  pinMode(GEAR_D_OUT, OUTPUT);
-  pinMode(GEAR_R_OUT, OUTPUT);
-
-  digitalWrite(GEAR_D_OUT, LOW);
-  digitalWrite(GEAR_R_OUT, LOW);      
+  //digitalWrite(GEAR_D_OUT, LOW);
+  //digitalWrite(GEAR_R_OUT, LOW);      
 }
 
 void loop() {
@@ -154,14 +195,15 @@ void loop() {
     Serial.println("into RX mode");
     Radio.Rx(0); // continuous RX
   }
+
   Radio.IrqProcess();
 
   //timed out
   if (!timedOut && (millis() - lastPacketTime > SIGNAL_TIMEOUT_MS)) {
-    //ledcWrite(PWM_PIN, 0);
-    dacWrite(APP_PWM_OUT, 0);
+    clearOutputs();   // important fix
+    //dacWrite(APP_PWM_OUT, 0);
     timedOut = true;
-    //Serial.println("0 LoRa timeout - PWM forced to 0");
+    Serial.println("TIMEOUT -> outputs cleared");
     drawOledStatus("LoRa timeout - PWM forced to 0");
   }
 }
@@ -184,7 +226,6 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi_in, int8_t snr) {
 
   // prevent overflow
   if (size >= BUFFER_SIZE) size = BUFFER_SIZE - 1;
-
   memcpy(rxpacket, payload, size);
   rxpacket[size] = '\0';
 
@@ -196,16 +237,15 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi_in, int8_t snr) {
   // PWM is the first number in the packet like "137"
   int pwm = atoi(rxpacket);          // convert string to int
   pwm = constrain(pwm, 0, 255);      // your allowed range
-  //ledcWrite(PWM_PIN, pwm);         // output PWM duty (0..255)
-  dacWrite(25, pwm);//
+  ledcWrite(APP_PWM_OUT, pwm);         // output PWM duty (0..255)
+  //dacWrite(25, pwm);//
 
-  // Default if not found
   char gear = '?';
-
-  // Parse the gear. Look for "G: "
   char *g = strstr(rxpacket, "G: ");
   if (g != NULL) {
     gear = *(g + 3);   // character after "G: "
+  } else {
+    gear = 'P';  // force Park if parsing fails
   }
 
   updateGearOutputs(gear);
