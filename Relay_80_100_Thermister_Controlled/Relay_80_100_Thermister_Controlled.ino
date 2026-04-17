@@ -41,8 +41,8 @@
 float RT, VR, ln, TX, T0, VRT;
 //float Vout;
 //int pwmValue;
-float onTempF  = 100.0;
-float offTempF = 80.0;
+float onTempF  = 150.0;//100.0;
+float offTempF = 130;//80.0;
 
 // Read thermistor temperature in Celsius
 float readThermistor(int pin) {
@@ -75,10 +75,10 @@ void loop() {
   float tempF2 = tempC2 * 1.8 + 32;
 
   // ----- RELAY LOGIC -----
-  if (tempF1 > 100 || tempF2 > 100) {
+  if ( tempF1 > 150 ){ //|| tempF2 > 100) {//150
     relayOn = true;
   }
-  else if (tempF1 < 80 && tempF2 < 80) {
+  else if ( tempF1 < 130 ){ //} && tempF2 < 80) {//130
     relayOn = false;
   }
 
@@ -87,8 +87,8 @@ void loop() {
   // ----- DEBUG OUTPUT -----
   Serial.print("T1: ");
   Serial.print(tempF1);
-  Serial.print("F | T2: ");
-  Serial.print(tempF2);
+  //Serial.print("F | T2: ");
+  //Serial.print(tempF2);
   Serial.print("F | Relay: ");
   Serial.println(relayOn ? "ON" : "OFF");
   //Serial.print(" | PWM: ");
