@@ -75,7 +75,7 @@ void loop() {
   float tempF2 = tempC2 * 1.8 + 32;
 
   // ----- RELAY LOGIC -----
-  if ( tempF1 > 150 ){ //|| tempF2 > 100) {//150
+  if ( tempF1 > 140 ){ //|| tempF2 > 100) {//150
     relayOn = true;
   }
   else if ( tempF1 < 130 ){ //} && tempF2 < 80) {//130
