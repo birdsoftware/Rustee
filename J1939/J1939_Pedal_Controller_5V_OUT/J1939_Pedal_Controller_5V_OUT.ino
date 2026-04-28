@@ -52,13 +52,10 @@ const int PWM_MAX_STEP = 50;
 // }
 float mapAppToVoltage(float appPercent) {
   appPercent = constrain(appPercent, 0.0f, APP_FULL_SCALE_PERCENT);
-
   float x = appPercent / APP_FULL_SCALE_PERCENT;
-
   // Curved output:
   // slow at first, then ramps up faster
   x = x * x;
-
   return minV + x * (maxV - minV);
 }
 
