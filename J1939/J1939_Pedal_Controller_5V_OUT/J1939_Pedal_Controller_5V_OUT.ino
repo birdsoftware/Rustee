@@ -1,3 +1,12 @@
+// future use
+// PGN F003  → Accelerator pedal position
+// PGN F004  → RPM, torque/load related values
+// PGN FEF1  → Vehicle speed / cruise / brake switch data
+// PGN FEEF  → Engine oil pressure / coolant temp
+// PGN FEEE  → Engine coolant temp / fuel temp / oil temp
+// PGN FEC1  → Total engine hours / revolutions
+// PGN FECA  → Diagnostic lamp status
+// PGN FEEF  → Fuel economy / fuel rate style data depending source
 #include <SPI.h>
 #include <mcp_can.h>
 
@@ -22,7 +31,7 @@ float vin = 0.780f;
 float minV = 0.780f;
 float maxV = 5.000f;//max voltagew
 
-const float APP_FULL_SCALE_PERCENT = 10.0f;//this makes pedal sensitive
+const float APP_FULL_SCALE_PERCENT = 5.0f;//this makes pedal sensitive
 
 int pwm = 0;
 int pwmHalf = 0;
@@ -35,9 +44,21 @@ const unsigned long RPM_TIMEOUT_MS = 500;
 int lastPwm = 0;
 const int PWM_MAX_STEP = 50;
 
+// linear
+// float mapAppToVoltage(float appPercent) {
+//   appPercent = constrain(appPercent, 0.0f, APP_FULL_SCALE_PERCENT);
+//   float x = appPercent / APP_FULL_SCALE_PERCENT;
+//   return minV + x * (maxV - minV);
+// }
 float mapAppToVoltage(float appPercent) {
   appPercent = constrain(appPercent, 0.0f, APP_FULL_SCALE_PERCENT);
+
   float x = appPercent / APP_FULL_SCALE_PERCENT;
+
+  // Curved output:
+  // slow at first, then ramps up faster
+  x = x * x;
+
   return minV + x * (maxV - minV);
 }
 
