@@ -1,3 +1,6 @@
+// Brian Bird
+// Using Security Patch from OBDGenie
+
 #include <SPI.h>
 #include <mcp_can.h>
 
