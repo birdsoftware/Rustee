@@ -1,1 +1,6 @@
 .DS_Store
+M110 Backup/
+*.exe
+*.zip
+*.msi
+*.cab
