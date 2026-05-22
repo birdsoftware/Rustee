@@ -67,41 +67,41 @@
     }
 
     function loadData() {
-  const old = document.getElementById("jsonpScript");
-  if (old) old.remove();
-
-  window.handleSensorData = function(json) {
-    const rows = json.rows || [];
-
-    if (!rows.length) {
-      document.getElementById("status").textContent = "No readings found yet.";
-      return;
+      const old = document.getElementById("jsonpScript");
+      if (old) old.remove();
+    
+      window.handleSensorData = function(json) {
+        const rows = json.rows || [];
+    
+        if (!rows.length) {
+          document.getElementById("status").textContent = "No readings found yet.";
+          return;
+        }
+    
+        const latest = rows[rows.length - 1];
+    
+        document.getElementById("tempC").textContent = latest.tempC;
+        document.getElementById("tempF").textContent = latest.tempF;
+        document.getElementById("humidity").textContent = latest.humidity;
+        document.getElementById("lastUpdated").textContent =
+          new Date(latest.timestamp).toLocaleString();
+    
+        chart.data.labels = rows.map(r =>
+          new Date(r.timestamp).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+        );
+        chart.data.datasets[0].data = rows.map(r => Number(r.tempF));
+        chart.data.datasets[1].data = rows.map(r => Number(r.humidity));
+        chart.update();
+    
+        document.getElementById("status").textContent =
+          `Showing ${rows.length} readings from the last 24 hours.`;
+      };
+    
+      const script = document.createElement("script");
+      script.id = "jsonpScript";
+      script.src = API_URL + "?callback=handleSensorData&cacheBust=" + Date.now();
+      document.body.appendChild(script);
     }
-
-    const latest = rows[rows.length - 1];
-
-    document.getElementById("tempC").textContent = latest.tempC;
-    document.getElementById("tempF").textContent = latest.tempF;
-    document.getElementById("humidity").textContent = latest.humidity;
-    document.getElementById("lastUpdated").textContent =
-      new Date(latest.timestamp).toLocaleString();
-
-    chart.data.labels = rows.map(r =>
-      new Date(r.timestamp).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
-    );
-    chart.data.datasets[0].data = rows.map(r => Number(r.tempF));
-    chart.data.datasets[1].data = rows.map(r => Number(r.humidity));
-    chart.update();
-
-    document.getElementById("status").textContent =
-      `Showing ${rows.length} readings from the last 24 hours.`;
-  };
-
-  const script = document.createElement("script");
-  script.id = "jsonpScript";
-  script.src = API_URL + "?callback=handleSensorData&cacheBust=" + Date.now();
-  document.body.appendChild(script);
-}
 
     loadData();
     setInterval(loadData, 30000);
