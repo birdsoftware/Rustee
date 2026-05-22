@@ -1,4 +1,9 @@
 //Using an Argon or Boron, the DHT11 is connected to D2. 
+// DHT11 + -> 3V3
+// DHT11 - -> GND
+// DHT11 S -> D2
+// D2 -> 10K R -> 3v3
+
 #include "Particle.h"
 #include "DHT.h"
 
