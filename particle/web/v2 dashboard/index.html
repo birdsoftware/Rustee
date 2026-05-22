@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Lovis Weather Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+  <style>
+    :root {
+      --bg1: #071014; --bg2: #10242b; --card: rgba(255,255,255,.075);
+      --border: rgba(255,255,255,.14); --text: #e5f7ff; --muted: #9fc2cc;
+      --good: #55f0a6; --bad: #ff6b6b;
+    }
+    body.light {
+      --bg1: #eef9fc; --bg2: #d8eef5; --card: rgba(255,255,255,.78);
+      --border: rgba(7,16,20,.14); --text: #0e2027; --muted: #46616b;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; padding: 18px; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: var(--text); background: linear-gradient(135deg, var(--bg1), var(--bg2)); }
+    .wrap { max-width: 1160px; margin: 0 auto; }
+    header { display: flex; gap: 14px; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; }
+    h1 { margin: 0 0 6px; font-size: clamp(28px, 5vw, 42px); line-height: 1.05; }
+    .muted { color: var(--muted); font-size: 16px; }
+    .topActions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+    button { border: 1px solid var(--border); color: var(--text); background: var(--card); border-radius: 999px; padding: 10px 14px; cursor: pointer; font-weight: 700; }
+    .statusPill { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--border); background: var(--card); border-radius: 999px; padding: 10px 14px; font-weight: 800; }
+    .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--bad); box-shadow: 0 0 14px var(--bad); }
+    .online .dot { background: var(--good); box-shadow: 0 0 14px var(--good); }
+    .cards, .miniGrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-bottom: 14px; }
+    .card, .chartBox { background: var(--card); border: 1px solid var(--border); border-radius: 20px; padding: 18px; box-shadow: 0 12px 30px rgba(0,0,0,.18); backdrop-filter: blur(10px); }
+    .label { color: var(--muted); font-size: 14px; font-weight: 700; }
+    .value { font-size: clamp(28px, 5vw, 38px); font-weight: 850; margin-top: 8px; }
+    .unit { font-size: 16px; color: var(--muted); }
+    .miniValue { font-size: 22px; font-weight: 800; margin-top: 6px; }
+    .chartGrid { display: grid; grid-template-columns: 1fr; gap: 14px; }
+    .chartHeader { display: flex; justify-content: space-between; gap: 10px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+    .chartWrap { position: relative; height: 280px; max-height: 280px; }
+    .status { margin-top: 12px; color: var(--muted); font-size: 14px; }
+    canvas { display: block; width: 100% !important; height: 100% !important; }
+    @media (max-width: 900px) { .cards, .miniGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    @media (max-width: 560px) {
+      body { padding: 12px; } header { display: block; } .topActions { justify-content: flex-start; margin-top: 14px; }
+      .cards, .miniGrid { grid-template-columns: 1fr; } .card, .chartBox { border-radius: 16px; padding: 14px; }
+      .chartWrap { height: 240px; max-height: 240px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div><h1>Lovis Weather Dashboard</h1><div class="muted">Live readings from St. George, UT</div></div>
+      <div class="topActions"><div id="deviceStatus" class="statusPill"><span class="dot"></span><span>Offline</span></div><button id="themeToggle" type="button">Toggle Theme</button></div>
+    </header>
+
+    <section class="cards">
+      <div class="card"><div class="label">Temp C</div><div class="value"><span id="tempC">--</span> <span class="unit">°C</span></div></div>
+      <div class="card"><div class="label">Temp F</div><div class="value"><span id="tempF">--</span> <span class="unit">°F</span></div></div>
+      <div class="card"><div class="label">Humidity</div><div class="value"><span id="humidity">--</span> <span class="unit">%</span></div></div>
+      <div class="card"><div class="label">Last Updated</div><div class="miniValue" id="lastUpdated">--</div></div>
+    </section>
+
+    <section class="miniGrid">
+      <div class="card"><div class="label">Min Temp Today</div><div class="miniValue"><span id="minTemp">--</span> °F</div></div>
+      <div class="card"><div class="label">Max Temp Today</div><div class="miniValue"><span id="maxTemp">--</span> °F</div></div>
+      <div class="card"><div class="label">Min Humidity Today</div><div class="miniValue"><span id="minHumidity">--</span>%</div></div>
+      <div class="card"><div class="label">Max Humidity Today</div><div class="miniValue"><span id="maxHumidity">--</span>%</div></div>
+    </section>
+
+    <section class="chartGrid">
+      <div class="chartBox">
+        <div class="chartHeader"><div><div class="label">Last 1 Hour</div><div class="muted">Detailed recent readings</div></div></div>
+        <div class="chartWrap"><canvas id="chart4h"></canvas></div>
+      </div>
+      <div class="chartBox">
+        <div class="chartHeader"><div><div class="label">Last 4 Hours</div><div class="muted">Medium-term trend</div></div></div>
+        <div class="chartWrap"><canvas id="chart12h"></canvas></div>
+      </div>
+      <div class="chartBox">
+        <div class="chartHeader"><div><div class="label">Last 24 Hours</div><div class="muted">Daily overview</div></div></div>
+        <div class="chartWrap"><canvas id="chart24h"></canvas></div>
+        <div class="status" id="status">Loading...</div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const API_URL = "https://script.google.com/macros/s/AKfycbwnEGUfpvk-a3wJgBwrIRM6s1DaAasQKaMLhyy6VEVmq5pvRBiERz3GNtwLoKmrr3K8/exec";
+    const OFFLINE_AFTER_MINUTES = 3;
+    const savedTheme = localStorage.getItem("theme");
+    if (savedTheme === "light") document.body.classList.add("light");
+    document.getElementById("themeToggle").addEventListener("click", () => {
+      document.body.classList.toggle("light");
+      localStorage.setItem("theme", document.body.classList.contains("light") ? "light" : "dark");
+      updateChartColors();
+    });
+
+    function getTextColor(){ return getComputedStyle(document.body).getPropertyValue("--text").trim(); }
+    function getMutedColor(){ return getComputedStyle(document.body).getPropertyValue("--muted").trim(); }
+
+    function makeChart(id, unit) {
+      return new Chart(document.getElementById(id), {
+        type: "line",
+        data: { datasets: [
+          { label: "Temp F", data: [], parsing: false, tension: 0.25, pointRadius: 1.8, borderWidth: 2 },
+          { label: "Humidity", data: [], parsing: false, tension: 0.25, pointRadius: 1.8, borderWidth: 2 }
+        ]},
+        options: {
+          responsive: true, maintainAspectRatio: false, animation: false,
+          interaction: { mode: "index", intersect: false },
+          plugins: { legend: { labels: { color: getTextColor() } }, tooltip: { callbacks: { title: items => new Date(items[0].parsed.x).toLocaleString() } } },
+          scales: {
+            x: { type: "time", time: { unit }, ticks: { color: getMutedColor(), maxTicksLimit: 7 }, grid: { color: "rgba(150,180,190,.16)" } },
+            y: { ticks: { color: getMutedColor() }, grid: { color: "rgba(150,180,190,.16)" } }
+          }
+        }
+      });
+    }
+
+    const charts = {
+      h1: makeChart("chart4h", "minute"),
+      h4: makeChart("chart12h", "minute"),
+      h24: makeChart("chart24h", "hour")
+    };
+
+    function updateChartColors() {
+      Object.values(charts).forEach(chart => {
+        chart.options.plugins.legend.labels.color = getTextColor();
+        chart.options.scales.x.ticks.color = getMutedColor();
+        chart.options.scales.y.ticks.color = getMutedColor();
+        chart.update();
+      });
+    }
+
+    function filterSince(rows, hours) {
+      const cutoff = Date.now() - hours * 60 * 60 * 1000;
+      return rows.filter(r => new Date(r.timestamp).getTime() >= cutoff);
+    }
+
+    function thinRows(rows, maxPoints = 160) {
+      if (rows.length <= maxPoints) return rows;
+      const step = Math.ceil(rows.length / maxPoints);
+      return rows.filter((_, i) => i % step === 0 || i === rows.length - 1);
+    }
+
+    function updateChart(chart, rows, hours) {
+      const cleaned = thinRows(rows);
+
+      chart.data.datasets[0].data = cleaned.map(r => ({
+        x: new Date(r.timestamp),
+        y: Number(r.tempF)
+      }));
+
+      chart.data.datasets[1].data = cleaned.map(r => ({
+        x: new Date(r.timestamp),
+        y: Number(r.humidity)
+      }));
+
+      const now = Date.now();
+      chart.options.scales.x.min = now - (hours * 60 * 60 * 1000);
+      chart.options.scales.x.max = now;
+
+      chart.update();
+    }
+
+    function setDeviceStatus(latestTime) {
+      const el = document.getElementById("deviceStatus");
+      const span = el.querySelector("span:last-child");
+      const ageMs = Date.now() - new Date(latestTime).getTime();
+      const online = ageMs <= OFFLINE_AFTER_MINUTES * 60 * 1000;
+      el.classList.toggle("online", online);
+      span.textContent = online ? "Online" : "Offline";
+    }
+
+    function calcTodayStats(rows) {
+      const now = new Date();
+      const today = rows.filter(r => { const d = new Date(r.timestamp); return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate(); });
+      const tempValues = today.map(r => Number(r.tempF)).filter(Number.isFinite);
+      const humidityValues = today.map(r => Number(r.humidity)).filter(Number.isFinite);
+      document.getElementById("minTemp").textContent = tempValues.length ? Math.min(...tempValues).toFixed(1) : "--";
+      document.getElementById("maxTemp").textContent = tempValues.length ? Math.max(...tempValues).toFixed(1) : "--";
+      document.getElementById("minHumidity").textContent = humidityValues.length ? Math.min(...humidityValues).toFixed(0) : "--";
+      document.getElementById("maxHumidity").textContent = humidityValues.length ? Math.max(...humidityValues).toFixed(0) : "--";
+    }
+
+    function loadData() {
+      const old = document.getElementById("jsonpScript");
+      if (old) old.remove();
+      window.handleSensorData = function(json) {
+        const rows = (json.rows || [])
+          .map(r => ({ ...r, timestamp: new Date(r.timestamp).toISOString() }))
+          .filter(r => !isNaN(new Date(r.timestamp).getTime()))
+          .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+        if (!rows.length) { document.getElementById("status").textContent = "No readings found yet."; return; }
+
+        const latest = rows[rows.length - 1];
+        document.getElementById("tempC").textContent = Number(latest.tempC).toFixed(1);
+        document.getElementById("tempF").textContent = Number(latest.tempF).toFixed(1);
+        document.getElementById("humidity").textContent = Number(latest.humidity).toFixed(0);
+        document.getElementById("lastUpdated").textContent = new Date(latest.timestamp).toLocaleString();
+        setDeviceStatus(latest.timestamp);
+        calcTodayStats(rows);
+        updateChart(charts.h1, filterSince(rows, 1), 1);
+        updateChart(charts.h4, filterSince(rows, 4), 4);
+        updateChart(charts.h24, filterSince(rows, 24), 24);
+        document.getElementById("status").textContent = `Showing ${filterSince(rows, 24).length} readings from the last 24 hours.`;
+      };
+      const script = document.createElement("script");
+      script.id = "jsonpScript";
+      script.src = API_URL + "?callback=handleSensorData&cacheBust=" + Date.now();
+      script.onerror = () => { document.getElementById("status").textContent = "Could not load data from Apps Script."; };
+      document.body.appendChild(script);
+    }
+
+    loadData();
+    setInterval(loadData, 30000);
+  </script>
+</body>
+</html>

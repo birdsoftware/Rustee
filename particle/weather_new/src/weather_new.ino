@@ -1,6 +1,6 @@
 //Using an Argon or Boron, the DHT11 is connected to D2. 
 #include "Particle.h"
-#include <DHT.h>
+#include "DHT.h"
 
 SYSTEM_MODE(AUTOMATIC);
 
@@ -16,8 +16,8 @@ double humidity = NAN;
 unsigned long lastReadMs = 0;
 unsigned long lastPublishMs = 0;
 
-const unsigned long READ_INTERVAL_MS = 3000;
-const unsigned long PUBLISH_INTERVAL_MS = 60000;
+const unsigned long READ_INTERVAL_MS = 5000;
+const unsigned long PUBLISH_INTERVAL_MS = 15000;
 
 void setup() {
     Serial.begin(9600);
@@ -61,12 +61,12 @@ void loop() {
         snprintf(data, sizeof(data),
                  "{\"tempC\":%.2f,\"tempF\":%.2f,\"humidity\":%.2f}",
                  tempC, tempF, humidity);
-        char dataf[96];
-        snprintf(dataf, sizeof(dataf),
-                 "{\"tempF\":%.2f}",
-                  tempF);
+        // char dataf[96];
+        // snprintf(dataf, sizeof(dataf),
+        //          "{\"tempF\":%.2f}",
+        //           tempF);
 
-        bool ok = Particle.publish("dht_reading", dataf, PRIVATE);
-        Serial.printlnf("Publish %s: %s", ok ? "OK" : "FAILED", dataf);
+        bool ok = Particle.publish("dht_reading", data, PRIVATE);
+        Serial.printlnf("Publish %s: %s", ok ? "OK" : "FAILED", data);
     }
 }
