@@ -91,6 +91,9 @@ float V_low  = 0.0;
 const int ADC_MIN_VALID = 2;     // anything <=2 treated as invalid
 const int ADC_MAX_VALID = 1021;  // anything >=1021 treated as invalid
 
+// -------- FILTERED OUTPUT -----------
+float filteredOutputVolts = 5.0;
+
 // ---------------- HELPERS ----------------
 float gxOffset = 0, gyOffset = 0, gzOffset = 0;
 bool anglesInitialized = false;
@@ -266,13 +269,13 @@ float gz = (gzRaw - gzOffset) / 131.0;
     // Only override output when input is near full 5V
     float absPitch = abs(pitch);
 
-    if (inputVolts >= 3.0) {
-      if (absPitch >= 55.0 && absPitch <= 70.0) {
-        outputVolts = -0.2 * absPitch + 16.0; // 55->5V, 60->4V, 65->3V, 70->2V
-      } else if (absPitch > 70.0) {
-        outputVolts = 2.0;
+    if (inputVolts >= 4.4) {//40-60
+      if (absPitch >= 40.0 && absPitch <= 60.0) {
+        outputVolts = -0.2 * absPitch + 13.0; // 55->5V, 60->4V, 65->3V, 70->2V
+      } else if (absPitch > 60.0) {
+        outputVolts = 1.0;
       } else {
-        outputVolts = 5.0;
+        outputVolts = inputVolts;
       }
     }
   }
@@ -287,10 +290,33 @@ float gz = (gzRaw - gzOffset) / 131.0;
   if(abs(roll) >= 50 ) 
   {outputVolts = 0.0;}
 
+  //outputVolts = constrain(outputVolts, 0.0, 5.0);
   outputVolts = constrain(outputVolts, 0.0, 5.0);
 
+  bool emergencyCutout = inputDisconnected || abs(roll) >= 50;
+
+  if (emergencyCutout) {
+
+      // Emergency cutouts stay instant
+      filteredOutputVolts = 0.0;
+  }
+  else if (inputVolts >= 1.5 && inputVolts <= 3.8) {
+
+      // Running average smoothing
+      // Lower number = smoother/slower
+      // ~500ms feel with 20ms loop
+
+      filteredOutputVolts =
+          (filteredOutputVolts * 0.92) +
+          (outputVolts * 0.08);
+  } else {
+  // instant outside range
+  filteredOutputVolts = outputVolts;
+}
+
 // ================= out =================
-  int pwmValue = (int)(outputVolts / 5.0 * 255.0);
+  //int pwmValue = (int)(outputVolts / 5.0 * 255.0);
+  int pwmValue = (int)(filteredOutputVolts / 5.0 * 255.0);
   pwmValue = constrain(pwmValue, 0, 255);
   analogWrite(analogOutPin, pwmValue);
 
@@ -303,7 +329,8 @@ float gz = (gzRaw - gzOffset) / 131.0;
   Serial.print(" C, In: ");
   Serial.print(inputVolts, 2);
   Serial.print(" V, Out: ");
-  Serial.print(outputVolts, 2);
+  //Serial.print(outputVolts, 2);
+  Serial.print(filteredOutputVolts, 2);
   Serial.print(" V, PWM: ");
   Serial.print(pwmValue);
 
