@@ -1,3 +1,8 @@
+// notes 5.27.26
+// 1. check x y direction. roll seems to work and thats all
+// 2. smooth power out
+// 3. 3v max seen should be 5v max
+
 // Nano
 //GYRO:
 // GY-521 VCC -> Nano 5V
@@ -259,10 +264,12 @@ float gz = (gzRaw - gzOffset) / 131.0;
   else {
     // Normal gyro behavior
     // Only override output when input is near full 5V
-    if (inputVolts >= 4.8) {
-      if (pitch >= 55.0 && pitch <= 70.0) {
-        outputVolts = -0.2 * pitch + 16.0; // 55->5V, 60->4V, 65->3V, 70->2V
-      } else if (pitch > 70.0) {
+    float absPitch = abs(pitch);
+
+    if (inputVolts >= 3.0) {
+      if (absPitch >= 55.0 && absPitch <= 70.0) {
+        outputVolts = -0.2 * absPitch + 16.0; // 55->5V, 60->4V, 65->3V, 70->2V
+      } else if (absPitch > 70.0) {
         outputVolts = 2.0;
       } else {
         outputVolts = 5.0;
@@ -277,7 +284,7 @@ float gz = (gzRaw - gzOffset) / 131.0;
   if (inputDisconnected) 
   {outputVolts = 0.0;}
 // Safety: hard roll left\right cut power
-  if(abs(roll) >= 70 ) 
+  if(abs(roll) >= 50 ) 
   {outputVolts = 0.0;}
 
   outputVolts = constrain(outputVolts, 0.0, 5.0);
