@@ -125,7 +125,7 @@ void publishToCloud() {
         frameCount
     );
 
-    bool ok = Particle.publish("can_reading", data, PRIVATE);
+    bool ok = Particle.publish("dht_reading", data, PRIVATE);
     Serial.printlnf("Publish %s: %s", ok ? "OK" : "FAILED", data);
 }
 
@@ -184,6 +184,14 @@ void loop() {
 
         frameCount++;
         rxId &= 0x1FFFFFFF;
+
+        //raw id sampler
+        if (frameCount % 500 == 0) {
+            Serial.print("RAW ID: 0x");
+            Serial.print(rxId, HEX);
+            Serial.print(" LEN: ");
+            Serial.println(len);
+        }
 
         if (rxId == 0x502 && len == 8) {
             dischargeChargeCurrLim = buf[2];
