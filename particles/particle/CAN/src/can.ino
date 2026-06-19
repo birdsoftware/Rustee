@@ -182,6 +182,10 @@ void loop() {
 
         if (CAN0.readMsgBuf(&rxId, &len, buf) != CAN_OK) return;
 
+        if (len > 8) {
+            return;
+        }
+
         frameCount++;
         rxId &= 0x1FFFFFFF;
 
@@ -212,8 +216,39 @@ void loop() {
             buf[1] == 0x00) {
 
             byte tx = buf[2];
-            uint32_t addr = pendingAddr[tx];
+
+            // OpenECU CCP response tx appears to be request tx + 1
+            byte lookupTx = tx;
+            uint32_t addr = pendingAddr[lookupTx];
+
+            if (addr == 0) {
+                return;
+            }
+
             float value = readFloatBE(&buf[3]);
+
+            if (addr == 0x40002A5C || addr == 0x40002A68) {
+
+                Serial.print("DEBUG addr=0x");
+                Serial.print(addr, HEX);
+
+                Serial.print(" tx=0x");
+                Serial.print(tx, HEX);
+
+                Serial.print(" lookupTx=0x");
+                Serial.print(lookupTx, HEX);
+
+                Serial.print(" bytes=");
+
+                for (int i = 3; i <= 6; i++) {
+                    if (buf[i] < 0x10) Serial.print("0");
+                    Serial.print(buf[i], HEX);
+                    Serial.print(" ");
+                }
+
+                Serial.print(" float=");
+                Serial.println(value, 6);
+            }
 
             switch (addr) {
                 case 0x0004048C: dischargeChargeCurrLim = value; break;
