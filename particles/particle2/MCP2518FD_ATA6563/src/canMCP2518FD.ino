@@ -26,8 +26,27 @@ static const uint16_t REG_C1MASK0    = 0x1F4;
 static const uint16_t REG_OSC        = 0xE00;
 static const uint16_t REG_IOCON      = 0xE04;
 
+struct PendingRequest {
+    bool valid;
+    uint32_t addr;
+};
+
+PendingRequest pending6F9[256];
+PendingRequest pending6EF[256];
+
 unsigned long frameCount = 0;
 unsigned long lastStatus = 0;
+
+double dischargeChargeCurrLim = NAN;
+double pumpHighSpeedRPM       = NAN;
+double motorToPumpGearRatio   = NAN;
+double canRectifierTemp       = NAN;
+double canMcuMotorTemp        = NAN;
+double canMcuMotorSpeed       = NAN;
+double canMcuDcVoltage        = NAN;
+double canMcuDcCurrent        = NAN;
+double ciRectifierTempDegC    = NAN;
+double ciGeneratorTempDegC    = NAN;
 
 uint16_t makeCmd(uint16_t instruction, uint16_t address) {
     return (instruction << 12) | (address & 0x0FFF);
@@ -110,7 +129,7 @@ void printReg(const char *name, uint16_t addr) {
 
 void popFifo1() {
     uint32_t fcon = readReg32(REG_C1FIFOCON1);
-    fcon |= 0x00000100;   // UINC
+    fcon |= 0x00000100;
     writeReg32(REG_C1FIFOCON1, fcon);
 }
 
@@ -137,23 +156,84 @@ uint32_t readAddrFromPayload(uint8_t *p) {
         ((uint32_t)p[7]);
 }
 
+const char* symbolName(uint32_t addr) {
+    switch (addr) {
+        case 0x0004048C: return "DischargeChargeCurrLim";
+        case 0x000404D0: return "PumpHighSpeedRPM";
+        case 0x000404DC: return "MotorToPumpGearRatio";
+        case 0x40002A34: return "CAN_RectifierTemp";
+        case 0x40002A58: return "CAN_McuMotorTemp";
+        case 0x40002A5C: return "CAN_McuMotorSpeed";
+        case 0x40002A68: return "CAN_McuDcVoltage";
+        case 0x40002A6C: return "CAN_McuDcCurrent";
+        case 0x40002568: return "CI_RectifierTempDegC";
+        case 0x4000256C: return "CI_GeneratorTempDegC";
+        default: return "UNKNOWN";
+    }
+}
+
+void storeValue(uint32_t addr, float value) {
+    if (isnan(value) || isinf(value)) return;
+    switch (addr) {
+        case 0x0004048C: if (value >= 0 && value <= 1000) dischargeChargeCurrLim = value; break;
+        case 0x000404D0: if (value >= 0 && value <= 5000) pumpHighSpeedRPM = value; break;
+        case 0x000404DC: if (value >= 0 && value <= 1000) motorToPumpGearRatio = value; break;
+        case 0x40002A34: if (value >= -40 && value <= 150) canRectifierTemp = value; break;
+        case 0x40002A58: if (value >= -40 && value <= 150) canMcuMotorTemp = value; break;
+        case 0x40002A5C: if (value >= -10000 && value <= 10000) canMcuMotorSpeed = value; break;
+        case 0x40002A68: if (value >= 0 && value <= 1000) canMcuDcVoltage = value; break;
+        case 0x40002A6C: if (value >= -1000 && value <= 100) canMcuDcCurrent = value; break;
+        case 0x40002568: if (value >= -40 && value <= 150) ciRectifierTempDegC = value; break;
+        case 0x4000256C: if (value >= -40 && value <= 150) ciGeneratorTempDegC = value; break;
+    }
+}
+
+void printValue(const char *name, double value, int decimals) {
+    Serial.print(name);
+    Serial.print(": ");
+
+    if (isnan(value)) {
+        Serial.println("--");
+    } else if (isinf(value)) {
+        Serial.println("ovf");
+    } else {
+        Serial.println(value, decimals);
+    }
+}
+
+void printLiveTable() {
+    Serial.println();
+    Serial.println("===== OpenECU Live Values =====");
+
+    printValue("DischargeChargeCurrLim", dischargeChargeCurrLim, 2);
+    printValue("PumpHighSpeedRPM", pumpHighSpeedRPM, 0);
+    printValue("MotorToPumpGearRatio", motorToPumpGearRatio, 0);
+    printValue("CAN_RectifierTemp", canRectifierTemp, 2);
+    printValue("CAN_McuMotorTemp", canMcuMotorTemp, 2);
+    printValue("CAN_McuMotorSpeed", canMcuMotorSpeed, 0);
+    printValue("CAN_McuDcVoltage", canMcuDcVoltage, 2);
+    printValue("CAN_McuDcCurrent", canMcuDcCurrent, 2);
+    printValue("CI_RectifierTempDegC", ciRectifierTempDegC, 2);
+    printValue("CI_GeneratorTempDegC", ciGeneratorTempDegC, 2);
+
+    Serial.println("===============================");
+}
+
 void initCAN() {
     Serial.println();
-    Serial.println("MCP2518FD OpenECU RX Decoder");
+    Serial.println("MCP2518FD OpenECU CCP Decoder");
 
     mcpReset();
 
     Serial.println("Config mode...");
     requestMode(4);
 
-    // Working 20 MHz / 250 kbps timing
     writeReg32(REG_C1NBTCFG, 0x003E0F0F);
     writeReg32(REG_C1DBTCFG, 0x003E0F0F);
 
-    // FIFO1 as RX FIFO
+    // FIFO1 as RX FIFO, known-good config
     writeReg32(REG_C1FIFOCON1, 0x0000001F);
 
-    // Accept-all filter 0 -> FIFO1
     writeReg32(REG_C1FLTOBJ0, 0x00000000);
     writeReg32(REG_C1MASK0,   0x00000000);
     writeReg32(REG_C1FLTCON0, 0x00000081);
@@ -161,6 +241,14 @@ void initCAN() {
     writeReg32(REG_C1INT,    0x00000000);
     writeReg32(REG_C1RXIF,   0x00000000);
     writeReg32(REG_C1RXOVIF, 0x00000000);
+
+    for (int i = 0; i < 256; i++) {
+        pending6F9[i].valid = false;
+        pending6F9[i].addr = 0;
+
+        pending6EF[i].valid = false;
+        pending6EF[i].addr = 0;
+    }
 
     Serial.println("Normal mode...");
     requestMode(0);
@@ -171,50 +259,58 @@ void initCAN() {
     printReg("C1CON ", REG_C1CON);
     printReg("NBTCFG", REG_C1NBTCFG);
     printReg("FCON1 ", REG_C1FIFOCON1);
+    printReg("FSTA1 ", REG_C1FIFOSTA1);
+    printReg("FUA1  ", REG_C1FIFOUA1);
     printReg("FLTCON", REG_C1FLTCON0);
     printReg("TREC  ", REG_C1TREC);
     printReg("BDIAG0", REG_C1BDIAG0);
 }
 
-void printFrame(uint32_t id, uint8_t len, uint8_t *p) {
-    Serial.print("ID=0x");
-    Serial.print(id, HEX);
+void handleFrame(uint32_t id, uint8_t len, uint8_t *p, uint8_t *raw) {
 
-    Serial.print(" LEN=");
-    Serial.print(len);
+    // Request frame: remember requested address by channel + tx byte
+    if ((id == 0x6F9 || id == 0x6EF) &&
+        len == 8 &&
+        p[0] == 0x0F) {
 
-    Serial.print(" DATA=");
-    for (uint8_t i = 0; i < len; i++) {
-        if (p[i] < 0x10) Serial.print("0");
-        Serial.print(p[i], HEX);
-        Serial.print(" ");
-    }
-
-    if ((id == 0x6F9 || id == 0x6EF) && len == 8 && p[0] == 0x0F) {
+        uint8_t tx = p[1];
         uint32_t addr = readAddrFromPayload(p);
 
-        Serial.print(" REQUEST addr=0x");
-        Serial.print(addr, HEX);
-        Serial.print(" tx=0x");
-        Serial.print(p[1], HEX);
+        PendingRequest *table = (id == 0x6F9) ? pending6F9 : pending6EF;
+
+        table[tx].valid = true;
+        table[tx].addr = addr;
+
+        return;
     }
 
-    if ((id == 0x6F8 || id == 0x6EE) && len == 8 && p[0] == 0xFF && p[1] == 0x00) {
+    // Response frame: match response to same channel/table
+    if ((id == 0x6F8 || id == 0x6EE) &&
+        len == 8 &&
+        p[0] == 0xFF &&
+        p[1] == 0x00) {
+
+        uint8_t tx = p[2];
         float value = readFloatBE(&p[3]);
 
-        Serial.print(" RESPONSE tx=0x");
-        Serial.print(p[2], HEX);
-        Serial.print(" value=");
-        Serial.print(value, 6);
-    }
+        PendingRequest *table = (id == 0x6F8) ? pending6F9 : pending6EF;
 
-    Serial.println();
+        if (table[tx].valid) {
+            uint32_t addr = table[tx].addr;
+
+            storeValue(addr, value);
+
+            table[tx].valid = false;
+        }
+
+        return;
+    }
 }
 
 void loop() {
-    uint32_t rxif = readReg32(REG_C1RXIF);
 
-    if (rxif & 0x00000002) {
+    while (readReg32(REG_C1RXIF) & 0x00000002) {
+
         uint32_t ua = readReg32(REG_C1FIFOUA1);
         uint16_t ramAddr = (uint16_t)(0x400 + ua);
 
@@ -234,7 +330,7 @@ void loop() {
 
         uint8_t *payload = &raw[8];
 
-        printFrame(id, len, payload);
+        handleFrame(id, len, payload, raw);
 
         popFifo1();
 
@@ -245,7 +341,9 @@ void loop() {
     if (millis() - lastStatus >= 5000) {
         lastStatus = millis();
 
-        Serial.print("alive frames=");
+        printLiveTable();
+
+        Serial.print("frames=");
         Serial.print(frameCount);
         Serial.print(" RXIF=0x");
         Serial.print(readReg32(REG_C1RXIF), HEX);
