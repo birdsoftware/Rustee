@@ -1,9 +1,31 @@
+/*
+What it does:
+Uses confirmed SHORT_UP format: 0F ctr size 00 addr32.
+Sends trailer requests on 0x6F9, expects 0x6F8.
+Sends cab requests on 0x6EF, expects 0x6EE.
+Sends CCP CONNECT first on both channels.
+Polls one watched symbol every 50 ms.
+Auto-disables active polling if it sees OpenECU Calibrator already sending CRO frames.
+*/
 #include "Particle.h"
 #include <SPI.h>
 
 SYSTEM_MODE(AUTOMATIC);
 
+// MCP2518FD chip-select. Keep this aligned with your wiring.
 static const uint8_t CS_PIN = D5;
+
+// Set false if exact hardware filters result in frames=0. Exact filters reduce
+// FIFO overrun while sniffing OpenECU CCP traffic.
+static const bool USE_EXACT_ID_FILTERS = true;
+
+// This build can actively poll OpenECU-style CCP SHORT_UP reads.
+// Safety: if it sees another CCP master sending CRO frames, it disables its own
+// active requests and behaves as a passive typed decoder.
+// 0 = Normal, 3 = Listen-only, 4 = Configuration on MCP2518FD.
+static const uint8_t MODE_NORMAL      = 0;
+static const uint8_t MODE_LISTEN_ONLY = 3;
+static const uint8_t MODE_CONFIG      = 4;
 
 static const uint16_t REG_C1CON      = 0x000;
 static const uint16_t REG_C1NBTCFG   = 0x004;
@@ -18,6 +40,9 @@ static const uint16_t REG_C1BDIAG1   = 0x03C;
 static const uint16_t REG_C1FIFOCON1 = 0x05C;
 static const uint16_t REG_C1FIFOSTA1 = 0x060;
 static const uint16_t REG_C1FIFOUA1  = 0x064;
+static const uint16_t REG_C1FIFOCON2 = 0x068;
+static const uint16_t REG_C1FIFOSTA2 = 0x06C;
+static const uint16_t REG_C1FIFOUA2  = 0x070;
 
 static const uint16_t REG_C1FLTCON0  = 0x1D0;
 static const uint16_t REG_C1FLTOBJ0  = 0x1F0;
@@ -26,27 +51,113 @@ static const uint16_t REG_C1MASK0    = 0x1F4;
 static const uint16_t REG_OSC        = 0xE00;
 static const uint16_t REG_IOCON      = 0xE04;
 
+static const uint32_t ID_TRAILER_CRO = 0x6F9;
+static const uint32_t ID_TRAILER_DTO = 0x6F8;
+static const uint32_t ID_CAB_CRO     = 0x6EF;
+static const uint32_t ID_CAB_DTO     = 0x6EE;
+static const uint32_t ID_DCCL_BCAST  = 0x502;
+
+static const bool ACTIVE_REQUESTS = true;
+static const bool DISABLE_ACTIVE_IF_EXTERNAL_CRO_SEEN = true;
+static const unsigned long ACTIVE_START_DELAY_MS = 5000;
+static const unsigned long REQUEST_PERIOD_MS = 50;
+static const unsigned long REQUEST_TIMEOUT_MS = 1000;
+
+// Keep the hot path quiet. Full CCP trace is useful for discovery, but it is
+// slow enough to cause FIFO overflow on this bus.
+static const bool TRACE_ALL_CCP = false;
+static const uint16_t CCP_TRACE_LIMIT = 40;
+static const uint16_t MATCH_TRACE_LIMIT = 80;
+static const unsigned long PENDING_TIMEOUT_MS = 1500;
+
+enum ValueType {
+    TYPE_F32,
+    TYPE_S16,
+    TYPE_U8,
+    TYPE_U32,
+    TYPE_ENUM32
+};
+
+struct LiveValue {
+    double value;
+    unsigned long updatedAt;
+};
+
+LiveValue dischargeChargeCurrLim = { NAN, 0 };
+LiveValue pumpHighSpeedRPM       = { NAN, 0 };
+LiveValue motorToPumpGearRatio   = { NAN, 0 };
+LiveValue canRectifierTemp       = { NAN, 0 };
+LiveValue canMcuMotorTemp        = { NAN, 0 };
+LiveValue canMcuMotorSpeed       = { NAN, 0 };
+LiveValue canMcuDcVoltage        = { NAN, 0 };
+LiveValue canMcuDcCurrent        = { NAN, 0 };
+LiveValue ciRectifierTempDegC    = { NAN, 0 };
+LiveValue ciGeneratorTempDegC    = { NAN, 0 };
+
+struct SymbolSpec {
+    uint32_t addr;
+    const char *name;
+    uint32_t requestId;
+    ValueType type;
+    uint8_t size;
+    double minValue;
+    double maxValue;
+    LiveValue *live;
+};
+
+SymbolSpec symbols[] = {
+    // Calibration block. OpenECU shows 0x0087 -> 135 for this one.
+    { 0x0004048C, "DischargeChargeCurrLim", ID_TRAILER_CRO, TYPE_S16, 2, 0, 1000, &dischargeChargeCurrLim },
+    { 0x000404D0, "PumpHighSpeedRPM",       ID_TRAILER_CRO, TYPE_F32, 4, 0, 5000, &pumpHighSpeedRPM },
+    { 0x000404DC, "MotorToPumpGearRatio",   ID_TRAILER_CRO, TYPE_F32, 4, 0, 1000, &motorToPumpGearRatio },
+
+    // Trailer ECU runtime RAM.
+    { 0x40002A34, "CAN_RectifierTemp",      ID_TRAILER_CRO, TYPE_F32, 4, -40, 150, &canRectifierTemp },
+    { 0x40002A58, "CAN_McuMotorTemp",       ID_TRAILER_CRO, TYPE_F32, 4, -40, 150, &canMcuMotorTemp },
+    { 0x40002A5C, "CAN_McuMotorSpeed",      ID_TRAILER_CRO, TYPE_F32, 4, -10000, 10000, &canMcuMotorSpeed },
+    { 0x40002A68, "CAN_McuDcVoltage",       ID_TRAILER_CRO, TYPE_F32, 4, 0, 1000, &canMcuDcVoltage },
+    { 0x40002A6C, "CAN_McuDcCurrent",       ID_TRAILER_CRO, TYPE_F32, 4, -1000, 1000, &canMcuDcCurrent },
+
+    // Cab ECU runtime RAM.
+    { 0x40002568, "CI_RectifierTempDegC",   ID_CAB_CRO, TYPE_F32, 4, -40, 150, &ciRectifierTempDegC },
+    { 0x4000256C, "CI_GeneratorTempDegC",   ID_CAB_CRO, TYPE_F32, 4, -40, 150, &ciGeneratorTempDegC },
+};
+
+static const uint8_t SYMBOL_COUNT = sizeof(symbols) / sizeof(symbols[0]);
+
 struct PendingRequest {
     bool valid;
     uint32_t addr;
+    uint8_t size;
+    uint8_t addrExt;
+    uint32_t requestId;
+    unsigned long requestedAt;
 };
 
 PendingRequest pending6F9[256];
 PendingRequest pending6EF[256];
 
 unsigned long frameCount = 0;
+unsigned long ccpRequestCount = 0;
+unsigned long ccpResponseCount = 0;
+unsigned long ccpMatchedCount = 0;
+unsigned long ccpOrphanCount = 0;
+unsigned long ccpStaleCount = 0;
+unsigned long ccpErrorCount = 0;
+unsigned long fifoOverflowCount = 0;
+unsigned long txSentCount = 0;
+unsigned long txSkipCount = 0;
+unsigned long activeTimeoutCount = 0;
+unsigned long externalCroCount = 0;
+unsigned long lastRequestAt = 0;
 unsigned long lastStatus = 0;
-
-double dischargeChargeCurrLim = NAN;
-double pumpHighSpeedRPM       = NAN;
-double motorToPumpGearRatio   = NAN;
-double canRectifierTemp       = NAN;
-double canMcuMotorTemp        = NAN;
-double canMcuMotorSpeed       = NAN;
-double canMcuDcVoltage        = NAN;
-double canMcuDcCurrent        = NAN;
-double ciRectifierTempDegC    = NAN;
-double ciGeneratorTempDegC    = NAN;
+uint16_t ccpTracePrinted = 0;
+uint16_t matchTracePrinted = 0;
+uint8_t nextCtrTrailer = 0x10;
+uint8_t nextCtrCab = 0x80;
+uint8_t pollIndex = 0;
+bool activePollingEnabled = ACTIVE_REQUESTS;
+bool activeDisabledByExternalMaster = false;
 
 uint16_t makeCmd(uint16_t instruction, uint16_t address) {
     return (instruction << 12) | (address & 0x0FFF);
@@ -113,6 +224,20 @@ void readBytes(uint16_t address, uint8_t *buf, size_t len) {
     csHigh();
 }
 
+void writeBytes(uint16_t address, const uint8_t *buf, size_t len) {
+    uint16_t cmd = makeCmd(0x2, address);
+
+    csLow();
+    xfer(cmd >> 8);
+    xfer(cmd & 0xFF);
+
+    for (size_t i = 0; i < len; i++) {
+        xfer(buf[i]);
+    }
+
+    csHigh();
+}
+
 void requestMode(uint8_t mode) {
     uint32_t c1con = readReg32(REG_C1CON);
     c1con &= ~(0x7UL << 24);
@@ -133,7 +258,53 @@ void popFifo1() {
     writeReg32(REG_C1FIFOCON1, fcon);
 }
 
-float readFloatBE(uint8_t *b) {
+uint16_t filterObjReg(uint8_t n) {
+    return REG_C1FLTOBJ0 + ((uint16_t)n * 8);
+}
+
+uint16_t filterMaskReg(uint8_t n) {
+    return REG_C1MASK0 + ((uint16_t)n * 8);
+}
+
+uint16_t filterConReg(uint8_t n) {
+    return REG_C1FLTCON0 + ((uint16_t)(n / 4) * 4);
+}
+
+void enableFilterToFifo1(uint8_t n) {
+    uint16_t reg = filterConReg(n);
+    uint8_t shift = (n % 4) * 8;
+    uint32_t v = readReg32(reg);
+
+    v &= ~(0xFFUL << shift);
+    v |= ((uint32_t)0x81 << shift);  // FLTEN=1, FBP=1.
+    writeReg32(reg, v);
+}
+
+void configureStandardIdFilter(uint8_t n, uint16_t sid) {
+    writeReg32(filterObjReg(n), sid & 0x7FF);
+    writeReg32(filterMaskReg(n), 0x000007FF);
+    enableFilterToFifo1(n);
+}
+
+void clearPendingRequests() {
+    for (int i = 0; i < 256; i++) {
+        pending6F9[i].valid = false;
+        pending6F9[i].addr = 0;
+        pending6F9[i].size = 0;
+        pending6F9[i].addrExt = 0;
+        pending6F9[i].requestId = 0;
+        pending6F9[i].requestedAt = 0;
+
+        pending6EF[i].valid = false;
+        pending6EF[i].addr = 0;
+        pending6EF[i].size = 0;
+        pending6EF[i].addrExt = 0;
+        pending6EF[i].requestId = 0;
+        pending6EF[i].requestedAt = 0;
+    }
+}
+
+float readFloatBE(const uint8_t *b) {
     union {
         uint32_t u;
         float f;
@@ -148,7 +319,19 @@ float readFloatBE(uint8_t *b) {
     return val.f;
 }
 
-uint32_t readAddrFromPayload(uint8_t *p) {
+int16_t readS16BE(const uint8_t *b) {
+    return (int16_t)(((uint16_t)b[0] << 8) | b[1]);
+}
+
+uint32_t readU32BE(const uint8_t *b) {
+    return
+        ((uint32_t)b[0] << 24) |
+        ((uint32_t)b[1] << 16) |
+        ((uint32_t)b[2] << 8)  |
+        ((uint32_t)b[3]);
+}
+
+uint32_t readAddrFromRequest(const uint8_t *p) {
     return
         ((uint32_t)p[4] << 24) |
         ((uint32_t)p[5] << 16) |
@@ -156,56 +339,382 @@ uint32_t readAddrFromPayload(uint8_t *p) {
         ((uint32_t)p[7]);
 }
 
-const char* symbolName(uint32_t addr) {
-    switch (addr) {
-        case 0x0004048C: return "DischargeChargeCurrLim";
-        case 0x000404D0: return "PumpHighSpeedRPM";
-        case 0x000404DC: return "MotorToPumpGearRatio";
-        case 0x40002A34: return "CAN_RectifierTemp";
-        case 0x40002A58: return "CAN_McuMotorTemp";
-        case 0x40002A5C: return "CAN_McuMotorSpeed";
-        case 0x40002A68: return "CAN_McuDcVoltage";
-        case 0x40002A6C: return "CAN_McuDcCurrent";
-        case 0x40002568: return "CI_RectifierTempDegC";
-        case 0x4000256C: return "CI_GeneratorTempDegC";
-        default: return "UNKNOWN";
+SymbolSpec* findSymbol(uint32_t addr) {
+    for (uint8_t i = 0; i < SYMBOL_COUNT; i++) {
+        if (symbols[i].addr == addr) {
+            return &symbols[i];
+        }
+    }
+    return NULL;
+}
+
+bool isWatchedAddress(uint32_t addr) {
+    return findSymbol(addr) != NULL;
+}
+
+bool decodeValue(const SymbolSpec *sym, const uint8_t *data, double *out) {
+    switch (sym->type) {
+        case TYPE_F32:
+            *out = readFloatBE(data);
+            return !isnan(*out) && !isinf(*out);
+        case TYPE_S16:
+            *out = readS16BE(data);
+            return true;
+        case TYPE_U8:
+            *out = data[0];
+            return true;
+        case TYPE_U32:
+        case TYPE_ENUM32:
+            *out = readU32BE(data);
+            return true;
+    }
+    return false;
+}
+
+void storeDecodedValue(const SymbolSpec *sym, double value) {
+    if (value < sym->minValue || value > sym->maxValue) {
+        return;
+    }
+    sym->live->value = value;
+    sym->live->updatedAt = millis();
+}
+
+void printHexByte(uint8_t v) {
+    if (v < 0x10) {
+        Serial.print('0');
+    }
+    Serial.print(v, HEX);
+}
+
+void printHex32(uint32_t v) {
+    for (int shift = 28; shift >= 0; shift -= 4) {
+        Serial.print((uint8_t)((v >> shift) & 0x0F), HEX);
     }
 }
 
-void storeValue(uint32_t addr, float value) {
-    if (isnan(value) || isinf(value)) return;
-    switch (addr) {
-        case 0x0004048C: if (value >= 0 && value <= 1000) dischargeChargeCurrLim = value; break;
-        case 0x000404D0: if (value >= 0 && value <= 5000) pumpHighSpeedRPM = value; break;
-        case 0x000404DC: if (value >= 0 && value <= 1000) motorToPumpGearRatio = value; break;
-        case 0x40002A34: if (value >= -40 && value <= 150) canRectifierTemp = value; break;
-        case 0x40002A58: if (value >= -40 && value <= 150) canMcuMotorTemp = value; break;
-        case 0x40002A5C: if (value >= -10000 && value <= 10000) canMcuMotorSpeed = value; break;
-        case 0x40002A68: if (value >= 0 && value <= 1000) canMcuDcVoltage = value; break;
-        case 0x40002A6C: if (value >= -1000 && value <= 100) canMcuDcCurrent = value; break;
-        case 0x40002568: if (value >= -40 && value <= 150) ciRectifierTempDegC = value; break;
-        case 0x4000256C: if (value >= -40 && value <= 150) ciGeneratorTempDegC = value; break;
+bool isCcpId(uint32_t id) {
+    return id == ID_TRAILER_CRO || id == ID_TRAILER_DTO ||
+           id == ID_CAB_CRO || id == ID_CAB_DTO;
+}
+
+PendingRequest* pendingTableForRequestId(uint32_t id) {
+    return (id == ID_TRAILER_CRO) ? pending6F9 : pending6EF;
+}
+
+PendingRequest* pendingTableForResponseId(uint32_t id) {
+    return (id == ID_TRAILER_DTO) ? pending6F9 : pending6EF;
+}
+
+uint8_t nextCounterForRequestId(uint32_t id) {
+    if (id == ID_TRAILER_CRO) {
+        return nextCtrTrailer++;
+    }
+    return nextCtrCab++;
+}
+
+void rememberPending(uint32_t requestId, uint8_t ctr, uint32_t addr, uint8_t size, uint8_t addrExt) {
+    PendingRequest *table = pendingTableForRequestId(requestId);
+    table[ctr].valid = true;
+    table[ctr].addr = addr;
+    table[ctr].size = size;
+    table[ctr].addrExt = addrExt;
+    table[ctr].requestId = requestId;
+    table[ctr].requestedAt = millis();
+}
+
+bool sendClassicFrame(uint32_t id, const uint8_t *payload, uint8_t len) {
+    if (len > 8) {
+        len = 8;
+    }
+
+    // FIFO2 configured as TX FIFO. Bit0 in FIFOSTA2 means "not full".
+    if ((readReg32(REG_C1FIFOSTA2) & 0x00000001) == 0) {
+        txSkipCount++;
+        return false;
+    }
+
+    uint32_t ua = readReg32(REG_C1FIFOUA2);
+    uint16_t ramAddr = (uint16_t)(0x400 + ua);
+
+    uint8_t raw[16];
+    for (uint8_t i = 0; i < sizeof(raw); i++) {
+        raw[i] = 0;
+    }
+
+    raw[0] = id & 0xFF;
+    raw[1] = (id >> 8) & 0xFF;
+    raw[2] = (id >> 16) & 0xFF;
+    raw[3] = (id >> 24) & 0xFF;
+    raw[4] = len & 0x0F;  // classic CAN DLC, no IDE/RTR/BRS/FDF bits.
+
+    for (uint8_t i = 0; i < len; i++) {
+        raw[8 + i] = payload[i];
+    }
+
+    writeBytes(ramAddr, raw, sizeof(raw));
+
+    // Set UINC and TXREQ. These are bits 8 and 9 in CiFIFOCON.
+    uint32_t fcon = readReg32(REG_C1FIFOCON2);
+    fcon |= 0x00000300;
+    writeReg32(REG_C1FIFOCON2, fcon);
+
+    txSentCount++;
+    return true;
+}
+
+bool sendCcpCommand(uint32_t requestId, uint8_t cmd, uint8_t ctr, uint8_t b2, uint8_t b3, uint32_t addr) {
+    uint8_t payload[8];
+    payload[0] = cmd;
+    payload[1] = ctr;
+    payload[2] = b2;
+    payload[3] = b3;
+    payload[4] = (addr >> 24) & 0xFF;
+    payload[5] = (addr >> 16) & 0xFF;
+    payload[6] = (addr >> 8) & 0xFF;
+    payload[7] = addr & 0xFF;
+
+    return sendClassicFrame(requestId, payload, 8);
+}
+
+bool sendConnect(uint32_t requestId) {
+    uint8_t ctr = nextCounterForRequestId(requestId);
+    return sendCcpCommand(requestId, 0x01, ctr, 0x00, 0x00, 0x00000000);
+}
+
+bool sendShortUp(const SymbolSpec *sym) {
+    uint8_t ctr = nextCounterForRequestId(sym->requestId);
+    if (sendCcpCommand(sym->requestId, 0x0F, ctr, sym->size, 0x00, sym->addr)) {
+        rememberPending(sym->requestId, ctr, sym->addr, sym->size, 0x00);
+        ccpRequestCount++;
+        return true;
+    }
+    return false;
+}
+
+void checkActiveTimeouts() {
+    PendingRequest *tables[] = { pending6F9, pending6EF };
+    unsigned long now = millis();
+
+    for (uint8_t t = 0; t < 2; t++) {
+        for (uint16_t i = 0; i < 256; i++) {
+            if (tables[t][i].valid && now - tables[t][i].requestedAt > REQUEST_TIMEOUT_MS) {
+                tables[t][i].valid = false;
+                activeTimeoutCount++;
+            }
+        }
     }
 }
 
-void printValue(const char *name, double value, int decimals) {
+void serviceActivePolling() {
+    if (!activePollingEnabled || millis() < ACTIVE_START_DELAY_MS) {
+        return;
+    }
+
+    if (millis() - lastRequestAt < REQUEST_PERIOD_MS) {
+        return;
+    }
+    lastRequestAt = millis();
+
+    if (txSentCount == 0) {
+        // OpenECU sends CONNECT before SHORT_UP. Do the same for both ECUs.
+        sendConnect(ID_TRAILER_CRO);
+        delay(2);
+        sendConnect(ID_CAB_CRO);
+        return;
+    }
+
+    const SymbolSpec *sym = &symbols[pollIndex];
+    pollIndex++;
+    if (pollIndex >= SYMBOL_COUNT) {
+        pollIndex = 0;
+    }
+
+    sendShortUp(sym);
+}
+
+void traceCcpFrame(uint32_t id, uint8_t len, const uint8_t *p) {
+    if (!TRACE_ALL_CCP || !isCcpId(id) || ccpTracePrinted >= CCP_TRACE_LIMIT) {
+        return;
+    }
+
+    ccpTracePrinted++;
+
+    Serial.print("CCP ");
+    Serial.print(id, HEX);
+    Serial.print(" ");
+
+    for (uint8_t i = 0; i < len; i++) {
+        printHexByte(p[i]);
+        if (i + 1 < len) {
+            Serial.print(' ');
+        }
+    }
+
+    if ((id == ID_TRAILER_CRO || id == ID_CAB_CRO) && len == 8 && p[0] == 0x0F) {
+        Serial.print("  SHORT_UP ctr=");
+        printHexByte(p[1]);
+        Serial.print(" size=");
+        Serial.print(p[2]);
+        Serial.print(" ext=");
+        printHexByte(p[3]);
+        Serial.print(" addr=0x");
+        printHex32(readAddrFromRequest(p));
+    } else if ((id == ID_TRAILER_DTO || id == ID_CAB_DTO) && len == 8 && p[0] == 0xFF) {
+        Serial.print("  DTO err=");
+        printHexByte(p[1]);
+        Serial.print(" ctr=");
+        printHexByte(p[2]);
+        Serial.print(" data=");
+        for (uint8_t i = 3; i < len; i++) {
+            printHexByte(p[i]);
+        }
+    }
+
+    Serial.println();
+}
+
+void handleFrame(uint32_t id, uint8_t len, uint8_t *p) {
+    traceCcpFrame(id, len, p);
+
+    if (id == ID_DCCL_BCAST && len == 8) {
+        // Older DBC/broadcast path from the previous exploration. Keep it
+        // conservative; CCP should overwrite it with the typed S16 value.
+        dischargeChargeCurrLim.value = p[2];
+        dischargeChargeCurrLim.updatedAt = millis();
+        return;
+    }
+
+    // CCP SHORT_UP request:
+    // [0] cmd=0x0F, [1] counter, [2] size, [3] address extension,
+    // [4..7] big-endian target address.
+    if ((id == ID_TRAILER_CRO || id == ID_CAB_CRO) &&
+        len == 8 &&
+        p[0] == 0x0F) {
+
+        externalCroCount++;
+        if (DISABLE_ACTIVE_IF_EXTERNAL_CRO_SEEN && activePollingEnabled) {
+            activePollingEnabled = false;
+            activeDisabledByExternalMaster = true;
+            clearPendingRequests();
+            Serial.println("Active polling disabled: external OpenECU CRO traffic detected");
+        }
+
+        PendingRequest *table = pendingTableForRequestId(id);
+        uint8_t ctr = p[1];
+
+        table[ctr].valid = true;
+        table[ctr].addr = readAddrFromRequest(p);
+        table[ctr].size = p[2];
+        table[ctr].addrExt = p[3];
+        table[ctr].requestId = id;
+        table[ctr].requestedAt = millis();
+
+        ccpRequestCount++;
+
+        if (isWatchedAddress(table[ctr].addr) && ccpTracePrinted < CCP_TRACE_LIMIT) {
+            ccpTracePrinted++;
+            Serial.print("WATCH_REQ ");
+            Serial.print(id, HEX);
+            Serial.print(" ctr=");
+            printHexByte(ctr);
+            Serial.print(" size=");
+            Serial.print(table[ctr].size);
+            Serial.print(" addr=0x");
+            printHex32(table[ctr].addr);
+            Serial.print(" ");
+            Serial.println(findSymbol(table[ctr].addr)->name);
+        }
+
+        return;
+    }
+
+    // CCP DTO response for SHORT_UP:
+    // [0] packet id 0xFF, [1] error code, [2] counter, [3..7] data.
+    if ((id == ID_TRAILER_DTO || id == ID_CAB_DTO) &&
+        len == 8 &&
+        p[0] == 0xFF) {
+
+        ccpResponseCount++;
+
+        uint8_t err = p[1];
+        uint8_t ctr = p[2];
+        PendingRequest *table = pendingTableForResponseId(id);
+
+        if (err != 0x00) {
+            ccpErrorCount++;
+            table[ctr].valid = false;
+            return;
+        }
+
+        if (!table[ctr].valid) {
+            ccpOrphanCount++;
+            return;
+        }
+
+        PendingRequest req = table[ctr];
+        table[ctr].valid = false;
+
+        if (millis() - req.requestedAt > PENDING_TIMEOUT_MS) {
+            ccpStaleCount++;
+            return;
+        }
+
+        SymbolSpec *sym = findSymbol(req.addr);
+        if (sym == NULL) {
+            return;
+        }
+
+        if (req.size != sym->size) {
+            // OpenECU may occasionally request adjacent bytes, but for this
+            // target list mismatched size usually means a bad match.
+            return;
+        }
+
+        double value = NAN;
+        if (!decodeValue(sym, &p[3], &value)) {
+            return;
+        }
+
+        storeDecodedValue(sym, value);
+        ccpMatchedCount++;
+
+        if (matchTracePrinted < MATCH_TRACE_LIMIT) {
+            matchTracePrinted++;
+            Serial.print("MATCH ");
+            Serial.print(id, HEX);
+            Serial.print(" ctr=");
+            printHexByte(ctr);
+            Serial.print(" addr=0x");
+            printHex32(req.addr);
+            Serial.print(" ");
+            Serial.print(sym->name);
+            Serial.print("=");
+            Serial.println(value, (sym->type == TYPE_F32) ? 2 : 0);
+        }
+
+        return;
+    }
+}
+
+void printValue(const char *name, const LiveValue &v, int decimals) {
     Serial.print(name);
     Serial.print(": ");
 
-    if (isnan(value)) {
+    if (isnan(v.value)) {
         Serial.println("--");
-    } else if (isinf(value)) {
-        Serial.println("ovf");
-    } else {
-        Serial.println(value, decimals);
+        return;
     }
+
+    Serial.print(v.value, decimals);
+    Serial.print("  age_ms=");
+    Serial.println(millis() - v.updatedAt);
 }
 
 void printLiveTable() {
     Serial.println();
-    Serial.println("===== OpenECU Live Values =====");
+    Serial.println("===== OpenECU CCP Live Values =====");
 
-    printValue("DischargeChargeCurrLim", dischargeChargeCurrLim, 2);
+    printValue("DischargeChargeCurrLim", dischargeChargeCurrLim, 0);
     printValue("PumpHighSpeedRPM", pumpHighSpeedRPM, 0);
     printValue("MotorToPumpGearRatio", motorToPumpGearRatio, 0);
     printValue("CAN_RectifierTemp", canRectifierTemp, 2);
@@ -216,42 +725,58 @@ void printLiveTable() {
     printValue("CI_RectifierTempDegC", ciRectifierTempDegC, 2);
     printValue("CI_GeneratorTempDegC", ciGeneratorTempDegC, 2);
 
-    Serial.println("===============================");
+    Serial.println("===================================");
 }
 
 void initCAN() {
     Serial.println();
-    Serial.println("MCP2518FD OpenECU CCP Decoder");
+    Serial.println("MCP2518FD OpenECU CCP active requester");
 
     mcpReset();
 
     Serial.println("Config mode...");
-    requestMode(4);
+    requestMode(MODE_CONFIG);
 
+    // Keep the same nominal/data bit timing as the previous working sketch.
     writeReg32(REG_C1NBTCFG, 0x003E0F0F);
     writeReg32(REG_C1DBTCFG, 0x003E0F0F);
 
-    // FIFO1 as RX FIFO, known-good config
+    // FIFO1 as RX FIFO, matching the previous known-good sketch.
     writeReg32(REG_C1FIFOCON1, 0x0000001F);
 
-    writeReg32(REG_C1FLTOBJ0, 0x00000000);
-    writeReg32(REG_C1MASK0,   0x00000000);
-    writeReg32(REG_C1FLTCON0, 0x00000081);
+    // FIFO2 as TX FIFO: TxEnable=1, priority=1, attempts=3, fifo size=4 objects,
+    // payload size=8 bytes. Based on MCP2518FD CiFIFOCON bit layout.
+    writeReg32(REG_C1FIFOCON2, 0x03610080);
+
+    writeReg32(REG_C1FLTCON0, 0x00000000);
+    writeReg32(REG_C1FLTCON0 + 4, 0x00000000);
+
+    if (USE_EXACT_ID_FILTERS) {
+        configureStandardIdFilter(0, ID_TRAILER_CRO);
+        configureStandardIdFilter(1, ID_TRAILER_DTO);
+        configureStandardIdFilter(2, ID_CAB_CRO);
+        configureStandardIdFilter(3, ID_CAB_DTO);
+        configureStandardIdFilter(4, ID_DCCL_BCAST);
+    } else {
+        // Fallback: accept all IDs into FIFO1.
+        writeReg32(REG_C1FLTOBJ0, 0x00000000);
+        writeReg32(REG_C1MASK0,   0x00000000);
+        writeReg32(REG_C1FLTCON0, 0x00000081);
+    }
 
     writeReg32(REG_C1INT,    0x00000000);
     writeReg32(REG_C1RXIF,   0x00000000);
     writeReg32(REG_C1RXOVIF, 0x00000000);
 
-    for (int i = 0; i < 256; i++) {
-        pending6F9[i].valid = false;
-        pending6F9[i].addr = 0;
+    clearPendingRequests();
 
-        pending6EF[i].valid = false;
-        pending6EF[i].addr = 0;
+    if (ACTIVE_REQUESTS) {
+        Serial.println("Normal mode; active polling armed after startup guard...");
+        requestMode(MODE_NORMAL);
+    } else {
+        Serial.println("Listen-only mode; active polling disabled by constant...");
+        requestMode(MODE_LISTEN_ONLY);
     }
-
-    Serial.println("Normal mode...");
-    requestMode(0);
 
     Serial.println("After init:");
     printReg("OSC   ", REG_OSC);
@@ -261,56 +786,26 @@ void initCAN() {
     printReg("FCON1 ", REG_C1FIFOCON1);
     printReg("FSTA1 ", REG_C1FIFOSTA1);
     printReg("FUA1  ", REG_C1FIFOUA1);
+    printReg("FCON2 ", REG_C1FIFOCON2);
+    printReg("FSTA2 ", REG_C1FIFOSTA2);
+    printReg("FUA2  ", REG_C1FIFOUA2);
     printReg("FLTCON", REG_C1FLTCON0);
     printReg("TREC  ", REG_C1TREC);
     printReg("BDIAG0", REG_C1BDIAG0);
+    printReg("BDIAG1", REG_C1BDIAG1);
 }
 
-void handleFrame(uint32_t id, uint8_t len, uint8_t *p, uint8_t *raw) {
-
-    // Request frame: remember requested address by channel + tx byte
-    if ((id == 0x6F9 || id == 0x6EF) &&
-        len == 8 &&
-        p[0] == 0x0F) {
-
-        uint8_t tx = p[1];
-        uint32_t addr = readAddrFromPayload(p);
-
-        PendingRequest *table = (id == 0x6F9) ? pending6F9 : pending6EF;
-
-        table[tx].valid = true;
-        table[tx].addr = addr;
-
-        return;
-    }
-
-    // Response frame: match response to same channel/table
-    if ((id == 0x6F8 || id == 0x6EE) &&
-        len == 8 &&
-        p[0] == 0xFF &&
-        p[1] == 0x00) {
-
-        uint8_t tx = p[2];
-        float value = readFloatBE(&p[3]);
-
-        PendingRequest *table = (id == 0x6F8) ? pending6F9 : pending6EF;
-
-        if (table[tx].valid) {
-            uint32_t addr = table[tx].addr;
-
-            storeValue(addr, value);
-
-            table[tx].valid = false;
-        }
-
-        return;
+void serviceOverflow() {
+    if (readReg32(REG_C1RXOVIF) & 0x00000002) {
+        fifoOverflowCount++;
+        writeReg32(REG_C1RXOVIF, 0x00000002);
     }
 }
 
 void loop() {
+    serviceOverflow();
 
     while (readReg32(REG_C1RXIF) & 0x00000002) {
-
         uint32_t ua = readReg32(REG_C1FIFOUA1);
         uint16_t ramAddr = (uint16_t)(0x400 + ua);
 
@@ -326,17 +821,21 @@ void loop() {
             ((uint32_t)raw[3] << 24);
 
         uint8_t len = raw[4] & 0x0F;
-        if (len > 8) len = 8;
+        if (len > 8) {
+            len = 8;
+        }
 
         uint8_t *payload = &raw[8];
-
-        handleFrame(id, len, payload, raw);
+        handleFrame(id, len, payload);
 
         popFifo1();
 
         writeReg32(REG_C1RXIF,   0x00000002);
-        writeReg32(REG_C1RXOVIF, 0x00000002);
     }
+
+    serviceOverflow();
+    checkActiveTimeouts();
+    serviceActivePolling();
 
     if (millis() - lastStatus >= 5000) {
         lastStatus = millis();
@@ -345,6 +844,41 @@ void loop() {
 
         Serial.print("frames=");
         Serial.print(frameCount);
+        Serial.print(" req=");
+        Serial.print(ccpRequestCount);
+        Serial.print(" resp=");
+        Serial.print(ccpResponseCount);
+        Serial.print(" matched=");
+        Serial.print(ccpMatchedCount);
+        Serial.print(" orphan=");
+        Serial.print(ccpOrphanCount);
+        Serial.print(" stale=");
+        Serial.print(ccpStaleCount);
+        Serial.print(" ccpErr=");
+        Serial.print(ccpErrorCount);
+        Serial.print(" fifoOv=");
+        Serial.print(fifoOverflowCount);
+        Serial.print(" tx=");
+        Serial.print(txSentCount);
+        Serial.print(" txSkip=");
+        Serial.print(txSkipCount);
+        Serial.print(" activeTimeout=");
+        Serial.print(activeTimeoutCount);
+        Serial.print(" externalCRO=");
+        Serial.print(externalCroCount);
+        Serial.print(" active=");
+        Serial.print(activePollingEnabled ? 1 : 0);
+        Serial.print(" disabledByMaster=");
+        Serial.print(activeDisabledByExternalMaster ? 1 : 0);
+        Serial.print(" trace=");
+        Serial.print(ccpTracePrinted);
+        Serial.print("/");
+        Serial.print(CCP_TRACE_LIMIT);
+        Serial.print(" matchTrace=");
+        Serial.print(matchTracePrinted);
+        Serial.print("/");
+        Serial.print(MATCH_TRACE_LIMIT);
+
         Serial.print(" RXIF=0x");
         Serial.print(readReg32(REG_C1RXIF), HEX);
         Serial.print(" RXOVIF=0x");
