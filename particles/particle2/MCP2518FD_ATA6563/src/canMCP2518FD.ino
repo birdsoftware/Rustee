@@ -82,6 +82,8 @@ LiveValue pumpLowSpeedRPM        = { NAN, 0 };
 LiveValue pumpHighSpeedRPM       = { NAN, 0 };
 LiveValue motorToPumpGearRatio   = { NAN, 0 };
 LiveValue flipFlowDirection      = { NAN, 0 };
+LiveValue ciTankerPressure       = { NAN, 0 };
+LiveValue ciExternalPressure     = { NAN, 0 };
 LiveValue canRectifierTemp       = { NAN, 0 };
 LiveValue canMcuMotorTemp        = { NAN, 0 };
 LiveValue canMcuMotorSpeed       = { NAN, 0 };
@@ -112,6 +114,8 @@ SymbolSpec symbols[] = {
     { 0x000404EC, "FlipFlowDirection",      ID_TRAILER_CRO, TYPE_ENUM32, 4, 0, 1, &flipFlowDirection },
 
     // Trailer ECU runtime RAM.
+    { 0x40002A18, "CI_TankerPressure",      ID_TRAILER_CRO, TYPE_F32, 4, -100, 100, &ciTankerPressure },
+    { 0x40002A1C, "CI_ExternalPressure",    ID_TRAILER_CRO, TYPE_F32, 4, -100, 100, &ciExternalPressure },
     { 0x40002A34, "CAN_RectifierTemp",      ID_TRAILER_CRO, TYPE_F32, 4, -40, 150, &canRectifierTemp },
     { 0x40002A58, "CAN_McuMotorTemp",       ID_TRAILER_CRO, TYPE_F32, 4, -40, 150, &canMcuMotorTemp },
     { 0x40002A5C, "CAN_McuMotorSpeed",      ID_TRAILER_CRO, TYPE_F32, 4, -10000, 10000, &canMcuMotorSpeed },
@@ -810,6 +814,8 @@ void printLiveTable() {
     printValue("PumpHighSpeedRPM", pumpHighSpeedRPM, 0);
     printValue("MotorToPumpGearRatio", motorToPumpGearRatio, 0);
     printValue("FlipFlowDirection", flipFlowDirection, 0);
+    printValue("CI_TankerPressure", ciTankerPressure, 2);
+    printValue("CI_ExternalPressure", ciExternalPressure, 2);
     printValue("CAN_RectifierTemp", canRectifierTemp, 2);
     printValue("CAN_McuMotorTemp", canMcuMotorTemp, 2);
     printValue("CAN_McuMotorSpeed", canMcuMotorSpeed, 0);
@@ -823,7 +829,7 @@ void printLiveTable() {
 
 void initCAN() {
     Serial.println();
-    Serial.println("MCP2518FD OpenECU CCP active requester v6 cab/trailer unit");
+    Serial.println("MCP2518FD OpenECU CCP active requester v7 pressures");
 
     mcpReset();
 
@@ -1047,3 +1053,4 @@ void setup() {
 
     initCAN();
 }
+
