@@ -1,4 +1,3 @@
-//With 11 values now, expected cycleMs should rise from about 750 to about 825
 #include "Particle.h"
 #include <SPI.h>
 
@@ -76,10 +75,13 @@ struct LiveValue {
     unsigned long updatedAt;
 };
 
+LiveValue cabUnitID              = { NAN, 0 };
+LiveValue trailerUnitID          = { NAN, 0 };
 LiveValue dischargeChargeCurrLim = { NAN, 0 };
 LiveValue pumpLowSpeedRPM        = { NAN, 0 };
 LiveValue pumpHighSpeedRPM       = { NAN, 0 };
 LiveValue motorToPumpGearRatio   = { NAN, 0 };
+LiveValue flipFlowDirection      = { NAN, 0 };
 LiveValue canRectifierTemp       = { NAN, 0 };
 LiveValue canMcuMotorTemp        = { NAN, 0 };
 LiveValue canMcuMotorSpeed       = { NAN, 0 };
@@ -101,10 +103,13 @@ struct SymbolSpec {
 
 SymbolSpec symbols[] = {
     // Calibration block. OpenECU shows 0x0087 -> 135 for this one.
+    { 0x00040408, "CAB_UnitID",             ID_CAB_CRO,     TYPE_U32, 4, 0, 4294967295.0, &cabUnitID },
+    { 0x00040404, "TRAILER_UnitID",         ID_TRAILER_CRO, TYPE_U32, 4, 0, 4294967295.0, &trailerUnitID },
     { 0x0004048C, "DischargeChargeCurrLim", ID_TRAILER_CRO, TYPE_S16, 2, 0, 1000, &dischargeChargeCurrLim },
     { 0x000404CC, "PumpLowSpeedRPM",        ID_TRAILER_CRO, TYPE_F32, 4, 0, 5000, &pumpLowSpeedRPM },
     { 0x000404D0, "PumpHighSpeedRPM",       ID_TRAILER_CRO, TYPE_F32, 4, 0, 5000, &pumpHighSpeedRPM },
     { 0x000404DC, "MotorToPumpGearRatio",   ID_TRAILER_CRO, TYPE_F32, 4, 0, 1000, &motorToPumpGearRatio },
+    { 0x000404EC, "FlipFlowDirection",      ID_TRAILER_CRO, TYPE_ENUM32, 4, 0, 1, &flipFlowDirection },
 
     // Trailer ECU runtime RAM.
     { 0x40002A34, "CAN_RectifierTemp",      ID_TRAILER_CRO, TYPE_F32, 4, -40, 150, &canRectifierTemp },
@@ -798,10 +803,13 @@ void printLiveTable() {
     Serial.println();
     Serial.println("===== OpenECU CCP Live Values =====");
 
+    printValue("CAB_UnitID", cabUnitID, 0);
+    printValue("TRAILER_UnitID", trailerUnitID, 0);
     printValue("DischargeChargeCurrLim", dischargeChargeCurrLim, 0);
     printValue("PumpLowSpeedRPM", pumpLowSpeedRPM, 0);
     printValue("PumpHighSpeedRPM", pumpHighSpeedRPM, 0);
     printValue("MotorToPumpGearRatio", motorToPumpGearRatio, 0);
+    printValue("FlipFlowDirection", flipFlowDirection, 0);
     printValue("CAN_RectifierTemp", canRectifierTemp, 2);
     printValue("CAN_McuMotorTemp", canMcuMotorTemp, 2);
     printValue("CAN_McuMotorSpeed", canMcuMotorSpeed, 0);
@@ -815,7 +823,7 @@ void printLiveTable() {
 
 void initCAN() {
     Serial.println();
-    Serial.println("MCP2518FD OpenECU CCP active requester v3 stability");
+    Serial.println("MCP2518FD OpenECU CCP active requester v6 cab/trailer unit");
 
     mcpReset();
 
