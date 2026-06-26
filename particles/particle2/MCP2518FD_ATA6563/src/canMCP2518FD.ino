@@ -1,12 +1,4 @@
-/*
-What it does:
-Uses confirmed SHORT_UP format: 0F ctr size 00 addr32.
-Sends trailer requests on 0x6F9, expects 0x6F8.
-Sends cab requests on 0x6EF, expects 0x6EE.
-Sends CCP CONNECT first on both channels.
-Polls one watched symbol every 50 ms.
-Auto-disables active polling if it sees OpenECU Calibrator already sending CRO frames.
-*/
+//With 11 values now, expected cycleMs should rise from about 750 to about 825
 #include "Particle.h"
 #include <SPI.h>
 
@@ -60,14 +52,15 @@ static const uint32_t ID_DCCL_BCAST  = 0x502;
 static const bool ACTIVE_REQUESTS = true;
 static const bool DISABLE_ACTIVE_IF_EXTERNAL_CRO_SEEN = true;
 static const unsigned long ACTIVE_START_DELAY_MS = 5000;
-static const unsigned long REQUEST_PERIOD_MS = 50;
+static const unsigned long REQUEST_PERIOD_MS = 75;
 static const unsigned long REQUEST_TIMEOUT_MS = 1000;
+static const bool ENABLE_DCCL_BCAST_FILTER = false;
 
 // Keep the hot path quiet. Full CCP trace is useful for discovery, but it is
 // slow enough to cause FIFO overflow on this bus.
 static const bool TRACE_ALL_CCP = false;
 static const uint16_t CCP_TRACE_LIMIT = 40;
-static const uint16_t MATCH_TRACE_LIMIT = 80;
+static const uint16_t MATCH_TRACE_LIMIT = 20;
 static const unsigned long PENDING_TIMEOUT_MS = 1500;
 
 enum ValueType {
@@ -84,6 +77,7 @@ struct LiveValue {
 };
 
 LiveValue dischargeChargeCurrLim = { NAN, 0 };
+LiveValue pumpLowSpeedRPM        = { NAN, 0 };
 LiveValue pumpHighSpeedRPM       = { NAN, 0 };
 LiveValue motorToPumpGearRatio   = { NAN, 0 };
 LiveValue canRectifierTemp       = { NAN, 0 };
@@ -108,6 +102,7 @@ struct SymbolSpec {
 SymbolSpec symbols[] = {
     // Calibration block. OpenECU shows 0x0087 -> 135 for this one.
     { 0x0004048C, "DischargeChargeCurrLim", ID_TRAILER_CRO, TYPE_S16, 2, 0, 1000, &dischargeChargeCurrLim },
+    { 0x000404CC, "PumpLowSpeedRPM",        ID_TRAILER_CRO, TYPE_F32, 4, 0, 5000, &pumpLowSpeedRPM },
     { 0x000404D0, "PumpHighSpeedRPM",       ID_TRAILER_CRO, TYPE_F32, 4, 0, 5000, &pumpHighSpeedRPM },
     { 0x000404DC, "MotorToPumpGearRatio",   ID_TRAILER_CRO, TYPE_F32, 4, 0, 1000, &motorToPumpGearRatio },
 
@@ -144,11 +139,24 @@ unsigned long ccpMatchedCount = 0;
 unsigned long ccpOrphanCount = 0;
 unsigned long ccpStaleCount = 0;
 unsigned long ccpErrorCount = 0;
+unsigned long ccpSizeMismatchCount = 0;
+unsigned long ccpDecodeRejectCount = 0;
+unsigned long ccpRangeRejectCount = 0;
 unsigned long fifoOverflowCount = 0;
 unsigned long txSentCount = 0;
 unsigned long txSkipCount = 0;
 unsigned long activeTimeoutCount = 0;
 unsigned long externalCroCount = 0;
+unsigned long lastMatchAt = 0;
+unsigned long lastResponseAt = 0;
+unsigned long lastTimeoutAt = 0;
+unsigned long responseLatencyTotalMs = 0;
+unsigned long responseLatencyCount = 0;
+unsigned long responseLatencyMaxMs = 0;
+unsigned long maxPendingSeen = 0;
+unsigned long fullCycleCount = 0;
+unsigned long lastCycleAt = 0;
+unsigned long lastCycleMs = 0;
 unsigned long lastRequestAt = 0;
 unsigned long lastStatus = 0;
 uint16_t ccpTracePrinted = 0;
@@ -371,12 +379,13 @@ bool decodeValue(const SymbolSpec *sym, const uint8_t *data, double *out) {
     return false;
 }
 
-void storeDecodedValue(const SymbolSpec *sym, double value) {
+bool storeDecodedValue(const SymbolSpec *sym, double value) {
     if (value < sym->minValue || value > sym->maxValue) {
-        return;
+        return false;
     }
     sym->live->value = value;
     sym->live->updatedAt = millis();
+    return true;
 }
 
 void printHexByte(uint8_t v) {
@@ -420,6 +429,63 @@ void rememberPending(uint32_t requestId, uint8_t ctr, uint32_t addr, uint8_t siz
     table[ctr].addrExt = addrExt;
     table[ctr].requestId = requestId;
     table[ctr].requestedAt = millis();
+
+    uint16_t pendingNow = 0;
+    PendingRequest *tables[] = { pending6F9, pending6EF };
+    for (uint8_t t = 0; t < 2; t++) {
+        for (uint16_t i = 0; i < 256; i++) {
+            if (tables[t][i].valid) {
+                pendingNow++;
+            }
+        }
+    }
+    if (pendingNow > maxPendingSeen) {
+        maxPendingSeen = pendingNow;
+    }
+}
+
+uint16_t countPendingRequests() {
+    uint16_t pendingNow = 0;
+    PendingRequest *tables[] = { pending6F9, pending6EF };
+
+    for (uint8_t t = 0; t < 2; t++) {
+        for (uint16_t i = 0; i < 256; i++) {
+            if (tables[t][i].valid) {
+                pendingNow++;
+            }
+        }
+    }
+
+    return pendingNow;
+}
+
+unsigned long oldestPendingAgeMs() {
+    unsigned long now = millis();
+    unsigned long oldest = 0;
+    PendingRequest *tables[] = { pending6F9, pending6EF };
+
+    for (uint8_t t = 0; t < 2; t++) {
+        for (uint16_t i = 0; i < 256; i++) {
+            if (tables[t][i].valid) {
+                unsigned long age = now - tables[t][i].requestedAt;
+                if (age > oldest) {
+                    oldest = age;
+                }
+            }
+        }
+    }
+
+    return oldest;
+}
+
+void recordResponseLatency(const PendingRequest &req) {
+    unsigned long latency = millis() - req.requestedAt;
+    responseLatencyTotalMs += latency;
+    responseLatencyCount++;
+    if (latency > responseLatencyMaxMs) {
+        responseLatencyMaxMs = latency;
+    }
+    lastMatchAt = millis();
 }
 
 bool sendClassicFrame(uint32_t id, const uint8_t *payload, uint8_t len) {
@@ -500,6 +566,7 @@ void checkActiveTimeouts() {
             if (tables[t][i].valid && now - tables[t][i].requestedAt > REQUEST_TIMEOUT_MS) {
                 tables[t][i].valid = false;
                 activeTimeoutCount++;
+                lastTimeoutAt = now;
             }
         }
     }
@@ -525,11 +592,20 @@ void serviceActivePolling() {
 
     const SymbolSpec *sym = &symbols[pollIndex];
     pollIndex++;
+    bool wrapped = false;
     if (pollIndex >= SYMBOL_COUNT) {
         pollIndex = 0;
+        wrapped = true;
     }
 
-    sendShortUp(sym);
+    if (sendShortUp(sym) && wrapped) {
+        unsigned long now = millis();
+        if (lastCycleAt != 0) {
+            lastCycleMs = now - lastCycleAt;
+        }
+        lastCycleAt = now;
+        fullCycleCount++;
+    }
 }
 
 void traceCcpFrame(uint32_t id, uint8_t len, const uint8_t *p) {
@@ -635,6 +711,7 @@ void handleFrame(uint32_t id, uint8_t len, uint8_t *p) {
         p[0] == 0xFF) {
 
         ccpResponseCount++;
+        lastResponseAt = millis();
 
         uint8_t err = p[1];
         uint8_t ctr = p[2];
@@ -667,15 +744,22 @@ void handleFrame(uint32_t id, uint8_t len, uint8_t *p) {
         if (req.size != sym->size) {
             // OpenECU may occasionally request adjacent bytes, but for this
             // target list mismatched size usually means a bad match.
+            ccpSizeMismatchCount++;
             return;
         }
 
         double value = NAN;
         if (!decodeValue(sym, &p[3], &value)) {
+            ccpDecodeRejectCount++;
             return;
         }
 
-        storeDecodedValue(sym, value);
+        if (!storeDecodedValue(sym, value)) {
+            ccpRangeRejectCount++;
+            return;
+        }
+
+        recordResponseLatency(req);
         ccpMatchedCount++;
 
         if (matchTracePrinted < MATCH_TRACE_LIMIT) {
@@ -715,6 +799,7 @@ void printLiveTable() {
     Serial.println("===== OpenECU CCP Live Values =====");
 
     printValue("DischargeChargeCurrLim", dischargeChargeCurrLim, 0);
+    printValue("PumpLowSpeedRPM", pumpLowSpeedRPM, 0);
     printValue("PumpHighSpeedRPM", pumpHighSpeedRPM, 0);
     printValue("MotorToPumpGearRatio", motorToPumpGearRatio, 0);
     printValue("CAN_RectifierTemp", canRectifierTemp, 2);
@@ -730,7 +815,7 @@ void printLiveTable() {
 
 void initCAN() {
     Serial.println();
-    Serial.println("MCP2518FD OpenECU CCP active requester");
+    Serial.println("MCP2518FD OpenECU CCP active requester v3 stability");
 
     mcpReset();
 
@@ -756,7 +841,9 @@ void initCAN() {
         configureStandardIdFilter(1, ID_TRAILER_DTO);
         configureStandardIdFilter(2, ID_CAB_CRO);
         configureStandardIdFilter(3, ID_CAB_DTO);
-        configureStandardIdFilter(4, ID_DCCL_BCAST);
+        if (ENABLE_DCCL_BCAST_FILTER) {
+            configureStandardIdFilter(4, ID_DCCL_BCAST);
+        }
     } else {
         // Fallback: accept all IDs into FIFO1.
         writeReg32(REG_C1FLTOBJ0, 0x00000000);
@@ -802,6 +889,17 @@ void serviceOverflow() {
     }
 }
 
+void printAgeField(const char *label, unsigned long eventAt) {
+    Serial.print(" ");
+    Serial.print(label);
+    Serial.print("=");
+    if (eventAt == 0) {
+        Serial.print("--");
+    } else {
+        Serial.print(millis() - eventAt);
+    }
+}
+
 void loop() {
     serviceOverflow();
 
@@ -842,6 +940,10 @@ void loop() {
 
         printLiveTable();
 
+        uint16_t pendingNow = countPendingRequests();
+        unsigned long oldestPending = oldestPendingAgeMs();
+        unsigned long latencyAvg = responseLatencyCount == 0 ? 0 : responseLatencyTotalMs / responseLatencyCount;
+
         Serial.print("frames=");
         Serial.print(frameCount);
         Serial.print(" req=");
@@ -856,6 +958,32 @@ void loop() {
         Serial.print(ccpStaleCount);
         Serial.print(" ccpErr=");
         Serial.print(ccpErrorCount);
+        Serial.print(" sizeMis=");
+        Serial.print(ccpSizeMismatchCount);
+        Serial.print(" decodeRej=");
+        Serial.print(ccpDecodeRejectCount);
+        Serial.print(" rangeRej=");
+        Serial.print(ccpRangeRejectCount);
+        Serial.print(" successPct=");
+        if (ccpRequestCount == 0) {
+            Serial.print("--");
+        } else {
+            Serial.print((100.0 * ccpMatchedCount) / ccpRequestCount, 1);
+        }
+        Serial.print(" pending=");
+        Serial.print(pendingNow);
+        Serial.print(" maxPending=");
+        Serial.print(maxPendingSeen);
+        Serial.print(" oldestPendingMs=");
+        Serial.print(oldestPending);
+        Serial.print(" rtAvgMs=");
+        Serial.print(latencyAvg);
+        Serial.print(" rtMaxMs=");
+        Serial.print(responseLatencyMaxMs);
+        Serial.print(" cycles=");
+        Serial.print(fullCycleCount);
+        Serial.print(" cycleMs=");
+        Serial.print(lastCycleMs);
         Serial.print(" fifoOv=");
         Serial.print(fifoOverflowCount);
         Serial.print(" tx=");
@@ -878,6 +1006,9 @@ void loop() {
         Serial.print(matchTracePrinted);
         Serial.print("/");
         Serial.print(MATCH_TRACE_LIMIT);
+        printAgeField("lastRespAgeMs", lastResponseAt);
+        printAgeField("lastMatchAgeMs", lastMatchAt);
+        printAgeField("lastTimeoutAgeMs", lastTimeoutAt);
 
         Serial.print(" RXIF=0x");
         Serial.print(readReg32(REG_C1RXIF), HEX);
