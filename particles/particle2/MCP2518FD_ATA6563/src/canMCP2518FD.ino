@@ -1,5 +1,6 @@
 #include "Particle.h"
 #include <SPI.h>
+#include <stdio.h>
 
 SYSTEM_MODE(AUTOMATIC);
 
@@ -54,6 +55,8 @@ static const unsigned long ACTIVE_START_DELAY_MS = 5000;
 static const unsigned long REQUEST_PERIOD_MS = 75;
 static const unsigned long REQUEST_TIMEOUT_MS = 1000;
 static const bool ENABLE_DCCL_BCAST_FILTER = false;
+static const unsigned long PUBLISH_PERIOD_MS = 60000;
+static const char *PUBLISH_EVENT_NAME = "dht_reading";
 
 // Keep the hot path quiet. Full CCP trace is useful for discovery, but it is
 // slow enough to cause FIFO overflow on this bus.
@@ -168,6 +171,7 @@ unsigned long lastCycleAt = 0;
 unsigned long lastCycleMs = 0;
 unsigned long lastRequestAt = 0;
 unsigned long lastStatus = 0;
+unsigned long lastPublish = 0;
 uint16_t ccpTracePrinted = 0;
 uint16_t matchTracePrinted = 0;
 uint8_t nextCtrTrailer = 0x10;
@@ -827,9 +831,70 @@ void printLiveTable() {
     Serial.println("===================================");
 }
 
+void publishToCloud() {
+    if (!Particle.connected()) {
+        return;
+    }
+
+    double successPct = NAN;
+    if (ccpRequestCount > 0) {
+        successPct = (100.0 * ccpMatchedCount) / ccpRequestCount;
+    }
+
+    char data[768];
+    int written = snprintf(
+        data,
+        sizeof(data),
+        "{\"cabUnitID\":%.0f,\"trailerUnitID\":%.0f,"
+        "\"dccLim\":%.0f,\"pumpLowRPM\":%.2f,\"pumpRPM\":%.2f,"
+        "\"gearRatio\":%.2f,\"flipFlow\":%.0f,"
+        "\"tankerPressure\":%.2f,\"externalPressure\":%.2f,"
+        "\"rectTemp\":%.2f,\"dcCurrent\":%.2f,\"dcVoltage\":%.2f,"
+        "\"motorSpeed\":%.2f,\"motorTemp\":%.2f,"
+        "\"ciRectTemp\":%.2f,\"ciGenTemp\":%.2f,"
+        "\"frames\":%lu,\"ccpReq\":%lu,\"ccpResp\":%lu,"
+        "\"matched\":%lu,\"successPct\":%.1f,"
+        "\"activeTimeout\":%lu,\"txSkip\":%lu}",
+        cabUnitID.value,
+        trailerUnitID.value,
+        dischargeChargeCurrLim.value,
+        pumpLowSpeedRPM.value,
+        pumpHighSpeedRPM.value,
+        motorToPumpGearRatio.value,
+        flipFlowDirection.value,
+        ciTankerPressure.value,
+        ciExternalPressure.value,
+        canRectifierTemp.value,
+        canMcuDcCurrent.value,
+        canMcuDcVoltage.value,
+        canMcuMotorSpeed.value,
+        canMcuMotorTemp.value,
+        ciRectifierTempDegC.value,
+        ciGeneratorTempDegC.value,
+        frameCount,
+        ccpRequestCount,
+        ccpResponseCount,
+        ccpMatchedCount,
+        successPct,
+        activeTimeoutCount,
+        txSkipCount
+    );
+
+    if (written <= 0 || written >= (int)sizeof(data)) {
+        Serial.println("Particle publish payload was truncated; skipping publish.");
+        return;
+    }
+
+    bool ok = Particle.publish(PUBLISH_EVENT_NAME, data, PRIVATE);
+    Serial.print("Particle.publish ");
+    Serial.print(PUBLISH_EVENT_NAME);
+    Serial.print(ok ? " OK bytes=" : " FAILED bytes=");
+    Serial.println(written);
+}
+
 void initCAN() {
     Serial.println();
-    Serial.println("MCP2518FD OpenECU CCP active requester v7 pressures");
+    Serial.println("MCP2518FD OpenECU CCP active requester v8 publish");
 
     mcpReset();
 
@@ -949,6 +1014,11 @@ void loop() {
     checkActiveTimeouts();
     serviceActivePolling();
 
+    if (millis() - lastPublish >= PUBLISH_PERIOD_MS) {
+        lastPublish = millis();
+        publishToCloud();
+    }
+
     if (millis() - lastStatus >= 5000) {
         lastStatus = millis();
 
@@ -1053,4 +1123,3 @@ void setup() {
 
     initCAN();
 }
-
