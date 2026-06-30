@@ -17,24 +17,24 @@
     h1 { margin: 0 0 8px; font-size: 34px; }
     .muted { color: var(--muted); margin-bottom: 22px; }
     .tabs { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 18px; }
-    .tabBtn { color: #e5f7ff; background: rgba(255,255,255,.09); border: 1px solid rgba(255,255,255,.2); border-radius: 999px; padding: 10px 16px; font-weight: 700; cursor: pointer; }
+    .tabBtn { color: #e5f7ff; background: rgba(255,255,255,.09); border: 1px solid rgba(255,255,255,.2); border-radius: 8px; padding: 10px 16px; font-weight: 700; cursor: pointer; }
     .tabBtn.active { background: rgba(57,213,255,.22); border-color: rgba(57,213,255,.7); }
     .tab { display: none; }
     .tab.active { display: block; }
     .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px; margin-bottom: 22px; }
-    .card { background: var(--panel); border: 1px solid var(--border); border-radius: 18px; padding: 18px; box-shadow: 0 12px 30px rgba(0,0,0,.22); min-height: 86px; }
+    .card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 18px; box-shadow: 0 12px 30px rgba(0,0,0,.22); min-height: 86px; }
     .label { color: var(--muted); font-size: 14px; font-weight: 650; }
     .value { font-size: 32px; font-weight: 800; margin-top: 8px; }
     .unit { font-size: 15px; color: var(--muted); font-weight: 700; }
-    .chartBox, .tableBox { background: var(--panel); border: 1px solid var(--border); border-radius: 18px; padding: 18px; margin-bottom: 20px; box-shadow: 0 12px 30px rgba(0,0,0,.18); }
+    .chartBox, .tableBox { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 18px; margin-bottom: 20px; box-shadow: 0 12px 30px rgba(0,0,0,.18); }
     .chartBox canvas { max-height: 380px; }
     .status { margin-top: 14px; color: var(--muted); font-size: 14px; }
     table { width: 100%; border-collapse: collapse; font-size: 13px; }
     th, td { border-bottom: 1px solid rgba(255,255,255,.11); padding: 9px 10px; text-align: right; white-space: nowrap; }
     th { color: #c8f2ff; background: rgba(255,255,255,.065); position: sticky; top: 0; }
     td:first-child, th:first-child { text-align: left; }
-    .tableScroll { overflow: auto; max-height: 520px; border-radius: 12px; }
-    .pill { display: inline-block; color: #bcecff; border: 1px solid rgba(57,213,255,.35); background: rgba(57,213,255,.08); border-radius: 999px; padding: 6px 10px; font-size: 12px; font-weight: 700; margin-bottom: 12px; }
+    .tableScroll { overflow: auto; max-height: 520px; border-radius: 8px; }
+    .pill { display: inline-block; color: #bcecff; border: 1px solid rgba(57,213,255,.35); background: rgba(57,213,255,.08); border-radius: 8px; padding: 6px 10px; font-size: 12px; font-weight: 700; margin-bottom: 12px; }
   </style>
 </head>
 <body>
@@ -78,9 +78,7 @@
       <div class="tableBox">
         <div class="tableScroll">
           <table>
-            <thead><tr>
-              <th>Timestamp</th><th>DCC Limit</th><th>Pump RPM</th><th>Gear Ratio</th><th>Rect Temp</th><th>DC Current</th><th>DC Voltage</th><th>Motor Speed</th><th>Motor Temp</th><th>CI Rect Temp</th><th>CI Gen Temp</th><th>Frames</th>
-            </tr></thead>
+            <thead><tr id="rawHead"></tr></thead>
             <tbody id="rawBody"></tbody>
           </table>
         </div>
@@ -94,9 +92,15 @@
 
     const fields = {
       overview: [
+        ["CAB Unit ID", "cabUnitID", ""],
+        ["Trailer Unit ID", "trailerUnitID", ""],
         ["Discharge Charge Current Limit", "dccLim", ""],
+        ["Pump Low Speed RPM", "pumpLowRPM", "rpm"],
         ["Pump High Speed RPM", "pumpRPM", "rpm"],
         ["Motor To Pump Gear Ratio", "gearRatio", ""],
+        ["Flip Flow Direction", "flipFlow", ""],
+        ["Tanker Pressure", "tankerPressure", ""],
+        ["External Pressure", "externalPressure", ""],
         ["MCU DC Voltage", "dcVoltage", "V"],
         ["MCU DC Current", "dcCurrent", "A"],
         ["MCU Motor Speed", "motorSpeed", "rpm"],
@@ -105,27 +109,65 @@
         ["Cab Rect Temp", "ciRectTemp", "°C"],
         ["Cab Generator Temp", "ciGenTemp", "°C"],
         ["CAN Frames", "frames", ""],
+        ["CCP Success", "successPct", "%"],
         ["Last Updated", "timestamp", ""]
       ],
       trailerPower: [
         ["Discharge Charge Current Limit", "dccLim", ""],
+        ["Tanker Pressure", "tankerPressure", ""],
+        ["External Pressure", "externalPressure", ""],
         ["MCU DC Current", "dcCurrent", "A"],
         ["MCU DC Voltage", "dcVoltage", "V"],
+        ["Rectifier Temp", "rectTemp", "°C"],
+        ["CCP Requests", "ccpReq", ""],
+        ["CCP Matches", "matched", ""],
+        ["CCP Success", "successPct", "%"],
         ["CAN Frames", "frames", ""]
       ],
       trailerMotion: [
+        ["Pump Low Speed RPM", "pumpLowRPM", "rpm"],
         ["Pump High Speed RPM", "pumpRPM", "rpm"],
         ["Motor To Pump Gear Ratio", "gearRatio", ""],
+        ["Flip Flow Direction", "flipFlow", ""],
         ["MCU Motor Speed", "motorSpeed", "rpm"],
         ["MCU Motor Temp", "motorTemp", "°C"],
-        ["Rectifier Temp", "rectTemp", "°C"]
+        ["Active Timeouts", "activeTimeout", ""],
+        ["TX Skips", "txSkip", ""]
       ],
       cab: [
+        ["CAB Unit ID", "cabUnitID", ""],
         ["Rectifier Temp C", "ciRectTemp", "°C"],
         ["Generator Temp C", "ciGenTemp", "°C"],
         ["Last Updated", "timestamp", ""]
       ]
     };
+
+    const rawColumns = [
+      ["Timestamp", "timestamp"],
+      ["CAB Unit ID", "cabUnitID"],
+      ["Trailer Unit ID", "trailerUnitID"],
+      ["DCC Limit", "dccLim"],
+      ["Pump Low RPM", "pumpLowRPM"],
+      ["Pump High RPM", "pumpRPM"],
+      ["Gear Ratio", "gearRatio"],
+      ["Flip Flow", "flipFlow"],
+      ["Tanker Pressure", "tankerPressure"],
+      ["External Pressure", "externalPressure"],
+      ["Rect Temp", "rectTemp"],
+      ["DC Current", "dcCurrent"],
+      ["DC Voltage", "dcVoltage"],
+      ["Motor Speed", "motorSpeed"],
+      ["Motor Temp", "motorTemp"],
+      ["CI Rect Temp", "ciRectTemp"],
+      ["CI Gen Temp", "ciGenTemp"],
+      ["Frames", "frames"],
+      ["CCP Req", "ccpReq"],
+      ["CCP Resp", "ccpResp"],
+      ["Matched", "matched"],
+      ["Success %", "successPct"],
+      ["Active Timeouts", "activeTimeout"],
+      ["TX Skips", "txSkip"]
+    ];
 
     let charts = {};
 
@@ -146,8 +188,11 @@
       if (key === "timestamp") return row.timestamp ? new Date(row.timestamp).toLocaleString() : "--";
       const value = row[key];
       if (!isGood(value)) return "--";
-      if (key === "frames") return Number(value).toLocaleString();
       const n = Number(value);
+      if (["frames", "ccpReq", "ccpResp", "matched", "activeTimeout", "txSkip", "cabUnitID", "trailerUnitID"].includes(key)) {
+        return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
+      }
+      if (key === "successPct") return n.toFixed(1);
       if (Math.abs(n) >= 1000) return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
       if (Number.isInteger(n)) return String(n);
       return n.toFixed(2);
@@ -168,9 +213,19 @@
     }
 
     function createChart(id, datasets) {
+      const palette = ["#5ad8ff", "#ffcd56", "#ff6384", "#4bc0c0", "#9966ff", "#c9cbcf"];
+      const styledDatasets = datasets.map((dataset, index) => ({
+        ...dataset,
+        borderColor: palette[index % palette.length],
+        backgroundColor: palette[index % palette.length] + "33",
+        borderWidth: 2,
+        pointRadius: 0,
+        spanGaps: true
+      }));
+
       return new Chart(document.getElementById(id), {
         type: "line",
-        data: { labels: [], datasets },
+        data: { labels: [], datasets: styledDatasets },
         options: {
           responsive: true, maintainAspectRatio: false, interaction: { mode: "index", intersect: false },
           plugins: { legend: { labels: { color: "#e5f7ff" } } },
@@ -186,14 +241,18 @@
       charts.trailerPower = createChart("trailerPowerChart", [
         { label: "DCC Limit", data: [], tension: 0.25 },
         { label: "DC Voltage", data: [], tension: 0.25 },
-        { label: "DC Current", data: [], tension: 0.25 }
+        { label: "DC Current", data: [], tension: 0.25 },
+        { label: "Tanker Pressure", data: [], tension: 0.25 },
+        { label: "External Pressure", data: [], tension: 0.25 },
+        { label: "Rect Temp C", data: [], tension: 0.25 }
       ]);
       charts.trailerMotion = createChart("trailerMotionChart", [
-        { label: "Pump RPM", data: [], tension: 0.25 },
+        { label: "Pump Low RPM", data: [], tension: 0.25 },
+        { label: "Pump High RPM", data: [], tension: 0.25 },
         { label: "Motor Speed", data: [], tension: 0.25 },
         { label: "Motor Temp C", data: [], tension: 0.25 },
-        { label: "Rect Temp C", data: [], tension: 0.25 },
-        { label: "Gear Ratio", data: [], tension: 0.25 }
+        { label: "Gear Ratio", data: [], tension: 0.25 },
+        { label: "Flip Flow", data: [], tension: 0.25 }
       ]);
       charts.cab = createChart("cabChart", [
         { label: "Rect Temp C", data: [], tension: 0.25 },
@@ -208,13 +267,10 @@
     }
 
     function renderRaw(rows) {
+      document.getElementById("rawHead").innerHTML = rawColumns.map(([label]) => `<th>${label}</th>`).join("");
       document.getElementById("rawBody").innerHTML = rows.slice().reverse().map(r => `
         <tr>
-          <td>${r.timestamp ? new Date(r.timestamp).toLocaleString() : ""}</td>
-          <td>${prettyValue(r, "dccLim")}</td><td>${prettyValue(r, "pumpRPM")}</td><td>${prettyValue(r, "gearRatio")}</td>
-          <td>${prettyValue(r, "rectTemp")}</td><td>${prettyValue(r, "dcCurrent")}</td><td>${prettyValue(r, "dcVoltage")}</td>
-          <td>${prettyValue(r, "motorSpeed")}</td><td>${prettyValue(r, "motorTemp")}</td><td>${prettyValue(r, "ciRectTemp")}</td>
-          <td>${prettyValue(r, "ciGenTemp")}</td><td>${prettyValue(r, "frames")}</td>
+          ${rawColumns.map(([, key]) => `<td>${prettyValue(r, key)}</td>`).join("")}
         </tr>
       `).join("");
     }
@@ -241,8 +297,8 @@
         renderCards("trailerMotionCards", fields.trailerMotion, latest);
         renderCards("cabCards", fields.cab, latest);
 
-        updateChart(charts.trailerPower, rows, ["dccLim", "dcVoltage", "dcCurrent"]);
-        updateChart(charts.trailerMotion, rows, ["pumpRPM", "motorSpeed", "motorTemp", "rectTemp", "gearRatio"]);
+        updateChart(charts.trailerPower, rows, ["dccLim", "dcVoltage", "dcCurrent", "tankerPressure", "externalPressure", "rectTemp"]);
+        updateChart(charts.trailerMotion, rows, ["pumpLowRPM", "pumpRPM", "motorSpeed", "motorTemp", "gearRatio", "flipFlow"]);
         updateChart(charts.cab, rows, ["ciRectTemp", "ciGenTemp"]);
         renderRaw(rows);
 
