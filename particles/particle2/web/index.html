@@ -62,7 +62,7 @@
     </section>
 
     <section id="trailerMotion" class="tab">
-      <div class="pill">Trailer ECU 2: pump, motor, gear ratio, and temperatures</div>
+      <div class="pill">Trailer ECU 2: pump, motor, and temperatures</div>
       <div class="cards" id="trailerMotionCards"></div>
       <div class="chartBox"><canvas id="trailerMotionChart"></canvas><div class="status" id="trailerMotionStatus">Loading...</div></div>
     </section>
@@ -97,7 +97,6 @@
         ["Discharge Charge Current Limit", "dccLim", ""],
         ["Pump Low Speed RPM", "pumpLowRPM", "rpm"],
         ["Pump High Speed RPM", "pumpRPM", "rpm"],
-        ["Motor To Pump Gear Ratio", "gearRatio", ""],
         ["Flip Flow Direction", "flipFlow", ""],
         ["Tanker Pressure", "tankerPressure", ""],
         ["External Pressure", "externalPressure", ""],
@@ -127,7 +126,6 @@
       trailerMotion: [
         ["Pump Low Speed RPM", "pumpLowRPM", "rpm"],
         ["Pump High Speed RPM", "pumpRPM", "rpm"],
-        ["Motor To Pump Gear Ratio", "gearRatio", ""],
         ["Flip Flow Direction", "flipFlow", ""],
         ["MCU Motor Speed", "motorSpeed", "rpm"],
         ["MCU Motor Temp", "motorTemp", "°C"],
@@ -149,7 +147,6 @@
       ["DCC Limit", "dccLim"],
       ["Pump Low RPM", "pumpLowRPM"],
       ["Pump High RPM", "pumpRPM"],
-      ["Gear Ratio", "gearRatio"],
       ["Flip Flow", "flipFlow"],
       ["Tanker Pressure", "tankerPressure"],
       ["External Pressure", "externalPressure"],
@@ -251,7 +248,6 @@
         { label: "Pump High RPM", data: [], tension: 0.25 },
         { label: "Motor Speed", data: [], tension: 0.25 },
         { label: "Motor Temp C", data: [], tension: 0.25 },
-        { label: "Gear Ratio", data: [], tension: 0.25 },
         { label: "Flip Flow", data: [], tension: 0.25 }
       ]);
       charts.cab = createChart("cabChart", [
@@ -298,7 +294,7 @@
         renderCards("cabCards", fields.cab, latest);
 
         updateChart(charts.trailerPower, rows, ["dccLim", "dcVoltage", "dcCurrent", "tankerPressure", "externalPressure", "rectTemp"]);
-        updateChart(charts.trailerMotion, rows, ["pumpLowRPM", "pumpRPM", "motorSpeed", "motorTemp", "gearRatio", "flipFlow"]);
+        updateChart(charts.trailerMotion, rows, ["pumpLowRPM", "pumpRPM", "motorSpeed", "motorTemp", "flipFlow"]);
         updateChart(charts.cab, rows, ["ciRectTemp", "ciGenTemp"]);
         renderRaw(rows);
 
