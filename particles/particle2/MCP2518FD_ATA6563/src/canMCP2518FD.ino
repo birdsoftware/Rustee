@@ -1,3 +1,32 @@
+/*
+  Wiring notes - Particle Argon + MCP2518FD + ATA6563
+
+  Particle Argon -> MCP2518FD CAN controller:
+    Argon 3V3        -> MCP2518FD VDD/VIO logic supply
+    Argon GND        -> MCP2518FD GND
+    Argon D13 / SCK  -> MCP2518FD SCK
+    Argon D12 / MISO -> MCP2518FD SO/SDO
+    Argon D11 / MOSI -> MCP2518FD SI/SDI
+    Argon D5         -> MCP2518FD CS (matches CS_PIN below)
+    MCP2518FD INT    -> not used by this polling sketch
+    MCP2518FD RESET  -> pull high if the breakout does not already do this
+
+  MCP2518FD -> ATA6563 CAN transceiver:
+    MCP2518FD CANTX/TXD -> ATA6563 TXD
+    MCP2518FD CANRX/RXD <- ATA6563 RXD
+    Argon 3V3           -> ATA6563 VIO, if the module exposes logic VIO
+    Transceiver VCC     -> ATA6563 VCC, per the breakout/module requirement
+    ATA6563 STBY/S      -> GND/LOW for normal mode
+    ATA6563 CANH        -> OpenECU CAN1 H
+    ATA6563 CANL        -> OpenECU CAN1 L
+    Common GND          -> OpenECU/CAN reference ground
+
+  Bus notes:
+    - Use only one 120 ohm termination at each end of the CAN bus.
+    - Keep Argon, MCP2518FD, ATA6563, and ECU grounds referenced together.
+    - This sketch uses hardware SPI plus CS only; no INT pin is required.
+*/
+
 #include "Particle.h"
 #include <SPI.h>
 #include <stdio.h>
@@ -1123,3 +1152,4 @@ void setup() {
 
     initCAN();
 }
+
