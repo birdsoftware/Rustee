@@ -112,7 +112,6 @@ LiveValue trailerUnitID          = { NAN, 0 };
 LiveValue dischargeChargeCurrLim = { NAN, 0 };
 LiveValue pumpLowSpeedRPM        = { NAN, 0 };
 LiveValue pumpHighSpeedRPM       = { NAN, 0 };
-LiveValue motorToPumpGearRatio   = { NAN, 0 };
 LiveValue flipFlowDirection      = { NAN, 0 };
 LiveValue ciTankerPressure       = { NAN, 0 };
 LiveValue ciExternalPressure     = { NAN, 0 };
@@ -142,7 +141,6 @@ SymbolSpec symbols[] = {
     { 0x0004048C, "DischargeChargeCurrLim", ID_TRAILER_CRO, TYPE_S16, 2, 0, 1000, &dischargeChargeCurrLim },
     { 0x000404CC, "PumpLowSpeedRPM",        ID_TRAILER_CRO, TYPE_F32, 4, 0, 5000, &pumpLowSpeedRPM },
     { 0x000404D0, "PumpHighSpeedRPM",       ID_TRAILER_CRO, TYPE_F32, 4, 0, 5000, &pumpHighSpeedRPM },
-    { 0x000404DC, "MotorToPumpGearRatio",   ID_TRAILER_CRO, TYPE_F32, 4, 0, 1000, &motorToPumpGearRatio },
     { 0x000404EC, "FlipFlowDirection",      ID_TRAILER_CRO, TYPE_ENUM32, 4, 0, 1, &flipFlowDirection },
 
     // Trailer ECU runtime RAM.
@@ -845,7 +843,6 @@ void printLiveTable() {
     printValue("DischargeChargeCurrLim", dischargeChargeCurrLim, 0);
     printValue("PumpLowSpeedRPM", pumpLowSpeedRPM, 0);
     printValue("PumpHighSpeedRPM", pumpHighSpeedRPM, 0);
-    printValue("MotorToPumpGearRatio", motorToPumpGearRatio, 0);
     printValue("FlipFlowDirection", flipFlowDirection, 0);
     printValue("CI_TankerPressure", ciTankerPressure, 2);
     printValue("CI_ExternalPressure", ciExternalPressure, 2);
@@ -876,7 +873,7 @@ void publishToCloud() {
         sizeof(data),
         "{\"cabUnitID\":%.0f,\"trailerUnitID\":%.0f,"
         "\"dccLim\":%.0f,\"pumpLowRPM\":%.2f,\"pumpRPM\":%.2f,"
-        "\"gearRatio\":%.2f,\"flipFlow\":%.0f,"
+        "\"flipFlow\":%.0f,"
         "\"tankerPressure\":%.2f,\"externalPressure\":%.2f,"
         "\"rectTemp\":%.2f,\"dcCurrent\":%.2f,\"dcVoltage\":%.2f,"
         "\"motorSpeed\":%.2f,\"motorTemp\":%.2f,"
@@ -889,7 +886,6 @@ void publishToCloud() {
         dischargeChargeCurrLim.value,
         pumpLowSpeedRPM.value,
         pumpHighSpeedRPM.value,
-        motorToPumpGearRatio.value,
         flipFlowDirection.value,
         ciTankerPressure.value,
         ciExternalPressure.value,
@@ -923,7 +919,7 @@ void publishToCloud() {
 
 void initCAN() {
     Serial.println();
-    Serial.println("MCP2518FD OpenECU CCP active requester v8 publish");
+    Serial.println("MCP2518FD OpenECU CCP active requester v9 no gear publish");
 
     mcpReset();
 
@@ -1152,4 +1148,3 @@ void setup() {
 
     initCAN();
 }
-
