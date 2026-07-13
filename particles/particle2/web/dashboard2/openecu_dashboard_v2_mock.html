@@ -1083,6 +1083,7 @@
       </div>
 
       <div class="driver-summary-grid">
+        <article class="metric" data-field="unitID"></article>
         <article class="metric" data-field="tankerPressure"></article>
         <article class="metric" data-field="externalPressure"></article>
         <article class="metric" data-field="pumpLowRPM"></article>
@@ -2282,6 +2283,7 @@
     }
 
     function renderDriver() {
+      renderMetric(document.querySelector('#driverView [data-field="unitID"]'), "unitID", "Share with support");
       renderMetric(document.querySelector('#driverView [data-field="tankerPressure"]'), "tankerPressure", "Current reading");
       renderMetric(document.querySelector('#driverView [data-field="externalPressure"]'), "externalPressure", "Current reading");
       renderMetric(document.querySelector('#driverView [data-field="pumpLowRPM"]'), "pumpLowRPM", "Low speed setpoint");
