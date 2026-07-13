@@ -1372,6 +1372,28 @@
       { key: "motorSpeed", label: "Motor Speed" },
       { key: "motorTemp", label: "Motor Temp" },
       { key: "generatorTemp", label: "Gen Temp" },
+      { key: "pdgcOverride0a", label: "PDGC Override 0A" },
+      { key: "pdgcOverride03", label: "PDGC Override 03" },
+      { key: "rectifierSensorError", label: "Rect Sensor Error" },
+      { key: "ptoLatchedOpen", label: "PTO Latched" },
+      { key: "generatorSensorError", label: "Gen Sensor Error" },
+      { key: "doorInterlock", label: "Door Interlock" },
+      { key: "pumpFrozen", label: "Pump Frozen" },
+      { key: "prechargeTimeout", label: "Precharge Timeout" },
+      { key: "mcuStartupStatus", label: "MCU Startup" },
+      { key: "mcuHeartbeat", label: "MCU Heartbeat" },
+      { key: "mcuCanTimeout", label: "MCU CAN Timeout" },
+      { key: "ignorePressureSensors", label: "Ignore Pressure" },
+      { key: "ignoreCabTempSensors", label: "Ignore Cab Temp" },
+      { key: "fatalError", label: "Fatal Error" },
+      { key: "errorCode", label: "Error Code" },
+      { key: "wakeInverter", label: "Wake Inverter" },
+      { key: "startPrecharge", label: "Start Precharge" },
+      { key: "restartRequest", label: "Restart Request" },
+      { key: "ignoreErrors", label: "Ignore Errors" },
+      { key: "closePosContact", label: "Close Pos Contactor" },
+      { key: "closeNegContact", label: "Close Neg Contactor" },
+      { key: "torqueRefPercent", label: "Torque Ref %" },
       { key: "frames", label: "Frames" },
       { key: "ccpSuccessPct", label: "CCP Success" },
       { key: "mode", label: "Mode" }
@@ -1457,16 +1479,36 @@
         pumpLowRPM: liveNumber(row, ["pumpLowRPM", "PumpLowSpeedRPM"], latest.pumpLowRPM),
         pumpHighRPM: liveNumber(row, ["pumpRPM", "pumpHighRPM", "PumpHighSpeedRPM"], latest.pumpHighRPM),
         flipFlow: liveNumber(row, ["flipFlow", "FlipFlowDirection"], latest.flipFlow),
+        pdgcOverride0a: liveNumber(row, ["pdgcOverride0a", "pdgc_override_service_0a"], latest.pdgcOverride0a),
+        pdgcOverride03: liveNumber(row, ["pdgcOverride03", "pdgc_override_service_03"], latest.pdgcOverride03),
         tankerPressure: liveNumber(row, ["tankerPressure", "CI_TankerPressure"], latest.tankerPressure),
         externalPressure: liveNumber(row, ["externalPressure", "CI_ExternalPressure"], latest.externalPressure),
         rectifierTemp: liveNumber(row, ["rectTemp", "rectifierTemp", "CAN_RectifierTemp"], latest.rectifierTemp),
+        rectifierSensorError: liveNumber(row, ["rectifierSensorError", "CAN_RectifierSensorError"], latest.rectifierSensorError),
+        ptoLatchedOpen: liveNumber(row, ["ptoLatchedOpen", "CAN_PtoLatchedOpen"], latest.ptoLatchedOpen),
         dcCurrent: liveNumber(row, ["dcCurrent", "CAN_McuDcCurrent"], latest.dcCurrent),
         dcVoltage: liveNumber(row, ["dcVoltage", "CAN_McuDcVoltage"], latest.dcVoltage),
         motorSpeed: liveNumber(row, ["motorSpeed", "CAN_McuMotorSpeed"], latest.motorSpeed),
         motorTemp: liveNumber(row, ["motorTemp", "CAN_McuMotorTemp"], latest.motorTemp),
         generatorTemp: liveNumber(row, ["generatorTemp", "CAN_GeneratorTemp", "ciGenTemp", "CI_GeneratorTempDegC"], latest.generatorTemp),
+        generatorSensorError: liveNumber(row, ["generatorSensorError", "CAN_GeneratorSensorError"], latest.generatorSensorError),
+        doorInterlock: liveNumber(row, ["doorInterlock", "CAN_DoorInterlock"], latest.doorInterlock),
+        pumpFrozen: liveNumber(row, ["pumpFrozen", "Log_PumpFrozen"], latest.pumpFrozen),
+        prechargeTimeout: liveNumber(row, ["prechargeTimeout", "Log_PrechargeTimeout"], latest.prechargeTimeout),
+        mcuStartupStatus: liveNumber(row, ["mcuStartupStatus", "Log_McuStartupStatus"], latest.mcuStartupStatus),
+        mcuHeartbeat: liveNumber(row, ["mcuHeartbeat", "Log_McuHeartbeat"], latest.mcuHeartbeat),
+        mcuCanTimeout: liveNumber(row, ["mcuCanTimeout", "Log_McuCanTimeout"], latest.mcuCanTimeout),
+        ignorePressureSensors: liveNumber(row, ["ignorePressureSensors", "Log_IgnorePressureSensors"], latest.ignorePressureSensors),
+        ignoreCabTempSensors: liveNumber(row, ["ignoreCabTempSensors", "Log_IgnoreCabEnclosureTempSensors"], latest.ignoreCabTempSensors),
         fatalError: liveNumber(row, ["fatalError", "Log_FatalError"], latest.fatalError),
         errorCode: liveNumber(row, ["errorCode", "Log_ErrorCode"], latest.errorCode),
+        wakeInverter: liveNumber(row, ["wakeInverter", "MFSM_WakeInverter"], latest.wakeInverter),
+        startPrecharge: liveNumber(row, ["startPrecharge", "MFSM_StartPrecharge"], latest.startPrecharge),
+        restartRequest: liveNumber(row, ["restartRequest", "MFSM_RestartRequest"], latest.restartRequest),
+        ignoreErrors: liveNumber(row, ["ignoreErrors", "MFSM_IgnoreErrors"], latest.ignoreErrors),
+        closePosContact: liveNumber(row, ["closePosContact", "MFSM_ClosePosContact"], latest.closePosContact),
+        closeNegContact: liveNumber(row, ["closeNegContact", "MFSM_CloseNegContact"], latest.closeNegContact),
+        torqueRefPercent: liveNumber(row, ["torqueRefPercent", "Log_TorqueRefPercent"], latest.torqueRefPercent),
         frames: liveNumber(row, ["frames"], latest.frames),
         ccpReq: liveNumber(row, ["ccpReq"], 0),
         ccpResp: liveNumber(row, ["ccpResp"], 0),
@@ -1485,16 +1527,36 @@
       latest.pumpLowRPM = row.pumpLowRPM;
       latest.pumpHighRPM = row.pumpHighRPM;
       latest.flipFlow = row.flipFlow;
+      latest.pdgcOverride0a = row.pdgcOverride0a;
+      latest.pdgcOverride03 = row.pdgcOverride03;
       latest.tankerPressure = row.tankerPressure;
       latest.externalPressure = row.externalPressure;
       latest.rectifierTemp = row.rectifierTemp;
+      latest.rectifierSensorError = row.rectifierSensorError;
+      latest.ptoLatchedOpen = row.ptoLatchedOpen;
       latest.dcCurrent = row.dcCurrent;
       latest.dcVoltage = row.dcVoltage;
       latest.motorSpeed = row.motorSpeed;
       latest.motorTemp = row.motorTemp;
       latest.generatorTemp = row.generatorTemp;
+      latest.generatorSensorError = row.generatorSensorError;
+      latest.doorInterlock = row.doorInterlock;
+      latest.pumpFrozen = row.pumpFrozen;
+      latest.prechargeTimeout = row.prechargeTimeout;
+      latest.mcuStartupStatus = row.mcuStartupStatus;
+      latest.mcuHeartbeat = row.mcuHeartbeat;
+      latest.mcuCanTimeout = row.mcuCanTimeout;
+      latest.ignorePressureSensors = row.ignorePressureSensors;
+      latest.ignoreCabTempSensors = row.ignoreCabTempSensors;
       latest.fatalError = row.fatalError;
       latest.errorCode = row.errorCode;
+      latest.wakeInverter = row.wakeInverter;
+      latest.startPrecharge = row.startPrecharge;
+      latest.restartRequest = row.restartRequest;
+      latest.ignoreErrors = row.ignoreErrors;
+      latest.closePosContact = row.closePosContact;
+      latest.closeNegContact = row.closeNegContact;
+      latest.torqueRefPercent = row.torqueRefPercent;
       latest.frames = row.frames;
       latest.ccpSuccessPct = row.ccpSuccessPct;
       latest.lastUpdate = row.timestamp;

@@ -915,17 +915,26 @@ void publishToCloud() {
         successPct = (100.0 * ccpMatchedCount) / ccpRequestCount;
     }
 
-    char data[768];
+    char data[1024];
     int written = snprintf(
         data,
         sizeof(data),
         "{\"cabUnitID\":%.0f,\"trailerUnitID\":%.0f,"
         "\"dccLim\":%.0f,\"pumpLowRPM\":%.2f,\"pumpRPM\":%.2f,"
         "\"flipFlow\":%.0f,"
-        "\"fatalError\":%.0f,\"errorCode\":%.0f,"
+        "\"pdgcOverride0a\":%.0f,\"pdgcOverride03\":%.0f,"
         "\"tankerPressure\":%.2f,\"externalPressure\":%.2f,"
-        "\"rectTemp\":%.2f,\"dcCurrent\":%.2f,\"dcVoltage\":%.2f,"
-        "\"motorSpeed\":%.2f,\"motorTemp\":%.2f,"
+        "\"rectTemp\":%.2f,\"rectifierSensorError\":%.0f,\"ptoLatchedOpen\":%.0f,"
+        "\"dcCurrent\":%.2f,\"dcVoltage\":%.2f,"
+        "\"motorSpeed\":%.2f,\"motorTemp\":%.2f,\"generatorTemp\":%.2f,"
+        "\"generatorSensorError\":%.0f,\"doorInterlock\":%.0f,"
+        "\"pumpFrozen\":%.0f,\"prechargeTimeout\":%.0f,"
+        "\"mcuStartupStatus\":%.2f,\"mcuHeartbeat\":%.0f,\"mcuCanTimeout\":%.0f,"
+        "\"ignorePressureSensors\":%.0f,\"ignoreCabTempSensors\":%.0f,"
+        "\"fatalError\":%.0f,\"errorCode\":%.0f,"
+        "\"wakeInverter\":%.0f,\"startPrecharge\":%.0f,\"restartRequest\":%.0f,"
+        "\"ignoreErrors\":%.0f,\"closePosContact\":%.0f,\"closeNegContact\":%.0f,"
+        "\"torqueRefPercent\":%.2f,"
         "\"ciRectTemp\":%.2f,\"ciGenTemp\":%.2f,"
         "\"frames\":%lu,\"ccpReq\":%lu,\"ccpResp\":%lu,"
         "\"matched\":%lu,\"successPct\":%.1f,"
@@ -936,15 +945,36 @@ void publishToCloud() {
         pumpLowSpeedRPM.value,
         pumpHighSpeedRPM.value,
         flipFlowDirection.value,
-        logFatalError.value,
-        logErrorCode.value,
+        pdgcOverrideService0a.value,
+        pdgcOverrideService03.value,
         ciTankerPressure.value,
         ciExternalPressure.value,
         canRectifierTemp.value,
+        canRectifierSensorErr.value,
+        canPtoLatchedOpen.value,
         canMcuDcCurrent.value,
         canMcuDcVoltage.value,
         canMcuMotorSpeed.value,
         canMcuMotorTemp.value,
+        canGeneratorTemp.value,
+        canGeneratorSensorErr.value,
+        canDoorInterlock.value,
+        logPumpFrozen.value,
+        logPrechargeTimeout.value,
+        logMcuStartupStatus.value,
+        logMcuHeartbeat.value,
+        logMcuCanTimeout.value,
+        logIgnorePressure.value,
+        logIgnoreCabTemps.value,
+        logFatalError.value,
+        logErrorCode.value,
+        mfsmWakeInverter.value,
+        mfsmStartPrecharge.value,
+        mfsmRestartRequest.value,
+        mfsmIgnoreErrors.value,
+        mfsmClosePosContact.value,
+        mfsmCloseNegContact.value,
+        logTorqueRefPercent.value,
         ciRectifierTempDegC.value,
         ciGeneratorTempDegC.value,
         frameCount,
