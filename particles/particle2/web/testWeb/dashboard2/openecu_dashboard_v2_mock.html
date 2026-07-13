@@ -1546,7 +1546,7 @@
       }
     }
 
-    async function loadLiveData() {
+    async function loadLiveData(forceRefresh = false) {
       if (!currentUser || liveFetchInFlight) return;
 
       liveFetchInFlight = true;
@@ -1557,6 +1557,9 @@
 
         const url = new URL(TELEMETRY_API_URL, window.location.origin);
         url.searchParams.set("support", supportModeActive ? "1" : "0");
+        if (forceRefresh) {
+          url.searchParams.set("refresh", "1");
+        }
 
         const response = await fetch(url, {
           headers: {
@@ -2593,7 +2596,7 @@
     document.getElementById("connectionToggleBtn").addEventListener("click", () => {
       const nowMs = Date.now();
       nextLiveFetchAt = nowMs;
-      loadLiveData();
+      loadLiveData(true);
       refreshOperations();
     });
     document.getElementById("offlineInfoBtn").addEventListener("click", () => {
