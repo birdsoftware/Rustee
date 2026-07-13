@@ -113,13 +113,36 @@ LiveValue dischargeChargeCurrLim = { NAN, 0 };
 LiveValue pumpLowSpeedRPM        = { NAN, 0 };
 LiveValue pumpHighSpeedRPM       = { NAN, 0 };
 LiveValue flipFlowDirection      = { NAN, 0 };
+LiveValue pdgcOverrideService0a  = { NAN, 0 };
+LiveValue pdgcOverrideService03  = { NAN, 0 };
 LiveValue ciTankerPressure       = { NAN, 0 };
 LiveValue ciExternalPressure     = { NAN, 0 };
 LiveValue canRectifierTemp       = { NAN, 0 };
+LiveValue canRectifierSensorErr  = { NAN, 0 };
+LiveValue canPtoLatchedOpen      = { NAN, 0 };
 LiveValue canMcuMotorTemp        = { NAN, 0 };
 LiveValue canMcuMotorSpeed       = { NAN, 0 };
 LiveValue canMcuDcVoltage        = { NAN, 0 };
 LiveValue canMcuDcCurrent        = { NAN, 0 };
+LiveValue canGeneratorTemp       = { NAN, 0 };
+LiveValue canGeneratorSensorErr  = { NAN, 0 };
+LiveValue canDoorInterlock       = { NAN, 0 };
+LiveValue logPumpFrozen          = { NAN, 0 };
+LiveValue logPrechargeTimeout    = { NAN, 0 };
+LiveValue logMcuStartupStatus    = { NAN, 0 };
+LiveValue logMcuHeartbeat        = { NAN, 0 };
+LiveValue logMcuCanTimeout       = { NAN, 0 };
+LiveValue logIgnorePressure      = { NAN, 0 };
+LiveValue logIgnoreCabTemps      = { NAN, 0 };
+LiveValue logFatalError          = { NAN, 0 };
+LiveValue logErrorCode           = { NAN, 0 };
+LiveValue mfsmWakeInverter       = { NAN, 0 };
+LiveValue mfsmStartPrecharge     = { NAN, 0 };
+LiveValue mfsmRestartRequest     = { NAN, 0 };
+LiveValue mfsmIgnoreErrors       = { NAN, 0 };
+LiveValue mfsmClosePosContact    = { NAN, 0 };
+LiveValue mfsmCloseNegContact    = { NAN, 0 };
+LiveValue logTorqueRefPercent    = { NAN, 0 };
 LiveValue ciRectifierTempDegC    = { NAN, 0 };
 LiveValue ciGeneratorTempDegC    = { NAN, 0 };
 
@@ -142,15 +165,38 @@ SymbolSpec symbols[] = {
     { 0x000404CC, "PumpLowSpeedRPM",        ID_TRAILER_CRO, TYPE_F32, 4, 0, 5000, &pumpLowSpeedRPM },
     { 0x000404D0, "PumpHighSpeedRPM",       ID_TRAILER_CRO, TYPE_F32, 4, 0, 5000, &pumpHighSpeedRPM },
     { 0x000404EC, "FlipFlowDirection",      ID_TRAILER_CRO, TYPE_ENUM32, 4, 0, 1, &flipFlowDirection },
+    { 0x000404F8, "pdgc_override_service_0a", ID_TRAILER_CRO, TYPE_ENUM32, 4, 0, 4294967295.0, &pdgcOverrideService0a },
+    { 0x00040500, "pdgc_override_service_03", ID_TRAILER_CRO, TYPE_ENUM32, 4, 0, 4294967295.0, &pdgcOverrideService03 },
 
     // Trailer ECU runtime RAM.
+    { 0x40002938, "MFSM_WakeInverter",      ID_TRAILER_CRO, TYPE_ENUM32, 4, 0, 1, &mfsmWakeInverter },
+    { 0x40002940, "MFSM_StartPrecharge",    ID_TRAILER_CRO, TYPE_ENUM32, 4, 0, 1, &mfsmStartPrecharge },
+    { 0x40002950, "MFSM_RestartRequest",    ID_TRAILER_CRO, TYPE_ENUM32, 4, 0, 1, &mfsmRestartRequest },
+    { 0x40002964, "MFSM_IgnoreErrors",      ID_TRAILER_CRO, TYPE_ENUM32, 4, 0, 1, &mfsmIgnoreErrors },
+    { 0x40002970, "MFSM_ClosePosContact",   ID_TRAILER_CRO, TYPE_ENUM32, 4, 0, 1, &mfsmClosePosContact },
+    { 0x40002974, "MFSM_CloseNegContact",   ID_TRAILER_CRO, TYPE_ENUM32, 4, 0, 1, &mfsmCloseNegContact },
+    { 0x4000298C, "Log_TorqueRefPercent",   ID_TRAILER_CRO, TYPE_F32, 4, -200, 200, &logTorqueRefPercent },
+    { 0x400029AC, "Log_PumpFrozen",         ID_TRAILER_CRO, TYPE_ENUM32, 4, 0, 1, &logPumpFrozen },
+    { 0x400029B4, "Log_PrechargeTimeout",   ID_TRAILER_CRO, TYPE_ENUM32, 4, 0, 1, &logPrechargeTimeout },
+    { 0x400029C0, "Log_McuStartupStatus",   ID_TRAILER_CRO, TYPE_F32, 4, -100000, 100000, &logMcuStartupStatus },
+    { 0x400029C4, "Log_McuHeartbeat",       ID_TRAILER_CRO, TYPE_U8, 1, 0, 255, &logMcuHeartbeat },
+    { 0x400029C8, "Log_McuCanTimeout",      ID_TRAILER_CRO, TYPE_ENUM32, 4, 0, 1, &logMcuCanTimeout },
+    { 0x400029E0, "Log_IgnorePressureSensors", ID_TRAILER_CRO, TYPE_ENUM32, 4, 0, 1, &logIgnorePressure },
+    { 0x400029E4, "Log_IgnoreCabEnclosureTempSensors", ID_TRAILER_CRO, TYPE_ENUM32, 4, 0, 1, &logIgnoreCabTemps },
+    { 0x400029FC, "Log_FatalError",         ID_TRAILER_CRO, TYPE_ENUM32, 4, 0, 1, &logFatalError },
+    { 0x40002A00, "Log_ErrorCode",          ID_TRAILER_CRO, TYPE_ENUM32, 4, 0, 4294967295.0, &logErrorCode },
     { 0x40002A18, "CI_TankerPressure",      ID_TRAILER_CRO, TYPE_F32, 4, -100, 100, &ciTankerPressure },
     { 0x40002A1C, "CI_ExternalPressure",    ID_TRAILER_CRO, TYPE_F32, 4, -100, 100, &ciExternalPressure },
     { 0x40002A34, "CAN_RectifierTemp",      ID_TRAILER_CRO, TYPE_F32, 4, -40, 150, &canRectifierTemp },
+    { 0x40002A38, "CAN_RectifierSensorError", ID_TRAILER_CRO, TYPE_ENUM32, 4, 0, 1, &canRectifierSensorErr },
+    { 0x40002A54, "CAN_PtoLatchedOpen",     ID_TRAILER_CRO, TYPE_ENUM32, 4, 0, 1, &canPtoLatchedOpen },
     { 0x40002A58, "CAN_McuMotorTemp",       ID_TRAILER_CRO, TYPE_F32, 4, -40, 150, &canMcuMotorTemp },
     { 0x40002A5C, "CAN_McuMotorSpeed",      ID_TRAILER_CRO, TYPE_F32, 4, -10000, 10000, &canMcuMotorSpeed },
     { 0x40002A68, "CAN_McuDcVoltage",       ID_TRAILER_CRO, TYPE_F32, 4, 0, 1000, &canMcuDcVoltage },
     { 0x40002A6C, "CAN_McuDcCurrent",       ID_TRAILER_CRO, TYPE_F32, 4, -1000, 1000, &canMcuDcCurrent },
+    { 0x40002A78, "CAN_GeneratorTemp",      ID_TRAILER_CRO, TYPE_F32, 4, -40, 150, &canGeneratorTemp },
+    { 0x40002A7C, "CAN_GeneratorSensorError", ID_TRAILER_CRO, TYPE_ENUM32, 4, 0, 1, &canGeneratorSensorErr },
+    { 0x40002A80, "CAN_DoorInterlock",      ID_TRAILER_CRO, TYPE_ENUM32, 4, 0, 1, &canDoorInterlock },
 
     // Cab ECU runtime RAM.
     { 0x40002568, "CI_RectifierTempDegC",   ID_CAB_CRO, TYPE_F32, 4, -40, 150, &ciRectifierTempDegC },
@@ -820,6 +866,20 @@ void handleFrame(uint32_t id, uint8_t len, uint8_t *p) {
     }
 }
 
+int decimalsForSymbol(const SymbolSpec &sym) {
+    if (sym.type != TYPE_F32) {
+        return 0;
+    }
+
+    if (strcmp(sym.name, "PumpLowSpeedRPM") == 0 ||
+        strcmp(sym.name, "PumpHighSpeedRPM") == 0 ||
+        strcmp(sym.name, "CAN_McuMotorSpeed") == 0) {
+        return 0;
+    }
+
+    return 2;
+}
+
 void printValue(const char *name, const LiveValue &v, int decimals) {
     Serial.print(name);
     Serial.print(": ");
@@ -838,21 +898,9 @@ void printLiveTable() {
     Serial.println();
     Serial.println("===== OpenECU CCP Live Values =====");
 
-    printValue("CAB_UnitID", cabUnitID, 0);
-    printValue("TRAILER_UnitID", trailerUnitID, 0);
-    printValue("DischargeChargeCurrLim", dischargeChargeCurrLim, 0);
-    printValue("PumpLowSpeedRPM", pumpLowSpeedRPM, 0);
-    printValue("PumpHighSpeedRPM", pumpHighSpeedRPM, 0);
-    printValue("FlipFlowDirection", flipFlowDirection, 0);
-    printValue("CI_TankerPressure", ciTankerPressure, 2);
-    printValue("CI_ExternalPressure", ciExternalPressure, 2);
-    printValue("CAN_RectifierTemp", canRectifierTemp, 2);
-    printValue("CAN_McuMotorTemp", canMcuMotorTemp, 2);
-    printValue("CAN_McuMotorSpeed", canMcuMotorSpeed, 0);
-    printValue("CAN_McuDcVoltage", canMcuDcVoltage, 2);
-    printValue("CAN_McuDcCurrent", canMcuDcCurrent, 2);
-    printValue("CI_RectifierTempDegC", ciRectifierTempDegC, 2);
-    printValue("CI_GeneratorTempDegC", ciGeneratorTempDegC, 2);
+    for (uint8_t i = 0; i < SYMBOL_COUNT; i++) {
+        printValue(symbols[i].name, *symbols[i].live, decimalsForSymbol(symbols[i]));
+    }
 
     Serial.println("===================================");
 }
@@ -874,6 +922,7 @@ void publishToCloud() {
         "{\"cabUnitID\":%.0f,\"trailerUnitID\":%.0f,"
         "\"dccLim\":%.0f,\"pumpLowRPM\":%.2f,\"pumpRPM\":%.2f,"
         "\"flipFlow\":%.0f,"
+        "\"fatalError\":%.0f,\"errorCode\":%.0f,"
         "\"tankerPressure\":%.2f,\"externalPressure\":%.2f,"
         "\"rectTemp\":%.2f,\"dcCurrent\":%.2f,\"dcVoltage\":%.2f,"
         "\"motorSpeed\":%.2f,\"motorTemp\":%.2f,"
@@ -887,6 +936,8 @@ void publishToCloud() {
         pumpLowSpeedRPM.value,
         pumpHighSpeedRPM.value,
         flipFlowDirection.value,
+        logFatalError.value,
+        logErrorCode.value,
         ciTankerPressure.value,
         ciExternalPressure.value,
         canRectifierTemp.value,
