@@ -1464,6 +1464,8 @@
         motorSpeed: liveNumber(row, ["motorSpeed", "CAN_McuMotorSpeed"], latest.motorSpeed),
         motorTemp: liveNumber(row, ["motorTemp", "CAN_McuMotorTemp"], latest.motorTemp),
         generatorTemp: liveNumber(row, ["generatorTemp", "CAN_GeneratorTemp", "ciGenTemp", "CI_GeneratorTempDegC"], latest.generatorTemp),
+        fatalError: liveNumber(row, ["fatalError", "Log_FatalError"], latest.fatalError),
+        errorCode: liveNumber(row, ["errorCode", "Log_ErrorCode"], latest.errorCode),
         frames: liveNumber(row, ["frames"], latest.frames),
         ccpReq: liveNumber(row, ["ccpReq"], 0),
         ccpResp: liveNumber(row, ["ccpResp"], 0),
@@ -1490,6 +1492,8 @@
       latest.motorSpeed = row.motorSpeed;
       latest.motorTemp = row.motorTemp;
       latest.generatorTemp = row.generatorTemp;
+      latest.fatalError = row.fatalError;
+      latest.errorCode = row.errorCode;
       latest.frames = row.frames;
       latest.ccpSuccessPct = row.ccpSuccessPct;
       latest.lastUpdate = row.timestamp;

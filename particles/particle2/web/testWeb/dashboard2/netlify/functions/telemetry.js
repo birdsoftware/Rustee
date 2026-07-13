@@ -175,6 +175,8 @@ function normalizeSheetRow(row) {
     motorSpeed: numberValue(row, ["motorSpeed", "CAN_McuMotorSpeed"]),
     motorTemp: numberValue(row, ["motorTemp", "CAN_McuMotorTemp"]),
     generatorTemp: numberValue(row, ["generatorTemp", "CAN_GeneratorTemp", "ciGenTemp", "CI_GeneratorTempDegC"]),
+    fatalError: numberValue(row, ["fatalError", "Log_FatalError"]),
+    errorCode: numberValue(row, ["errorCode", "Log_ErrorCode"]),
     frames: numberValue(row, ["frames"]),
     ccpReq: numberValue(row, ["ccpReq"]),
     ccpResp: numberValue(row, ["ccpResp"]),
