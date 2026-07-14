@@ -985,12 +985,12 @@
         <div class="ops-row">
           <div>
             <div class="kv-label">Device</div>
-            <div class="ops-title" id="deviceStateText">Online</div>
+            <div class="ops-title" id="deviceStateText">Checking</div>
           </div>
-          <span class="badge ok" id="deviceBadge">ONLINE</span>
+          <span class="badge warn" id="deviceBadge">LOADING</span>
         </div>
         <div class="ops-row">
-          <div class="ops-foot" id="deviceDetail">Last contact 8s ago</div>
+          <div class="ops-foot" id="deviceDetail">Loading vehicle status...</div>
           <div class="ops-row">
             <button class="icon-btn info-btn" id="offlineInfoBtn" type="button" aria-label="Offline details">i</button>
             <button class="icon-btn" id="connectionToggleBtn" type="button">Refresh Now</button>
@@ -1001,9 +1001,9 @@
       <article class="ops-card">
         <div>
           <div class="kv-label">Approx. Next Update</div>
-          <div class="ops-title" id="nextUpdateValue">0:52</div>
+          <div class="ops-title" id="nextUpdateValue">--</div>
         </div>
-        <div class="ops-foot" id="publishCadence">Normal cadence</div>
+        <div class="ops-foot" id="publishCadence">Checking server telemetry</div>
       </article>
 
       <article class="ops-card support-card">
@@ -1039,8 +1039,8 @@
     <section class="main-status" id="mainStatus">
       <article class="panel status-panel">
         <div class="status-line">
-          <h2 class="status-title" id="statusTitle">Normal Operation</h2>
-          <span class="badge ok" id="statusBadge">OK</span>
+          <h2 class="status-title" id="statusTitle">Checking Vehicle</h2>
+          <span class="badge warn" id="statusBadge">LOADING</span>
         </div>
         <div class="status-details">
           <div class="status-kv">
@@ -1067,18 +1067,18 @@
       <div class="driver-answers">
         <article class="answer-card primary">
           <div class="answer-question">Is the truck connected?</div>
-          <div class="answer-value" id="driverConnectionValue">Online</div>
-          <div class="answer-detail" id="driverConnectionDetail">Last contact 8s ago</div>
+          <div class="answer-value" id="driverConnectionValue">Checking</div>
+          <div class="answer-detail" id="driverConnectionDetail">Loading vehicle status...</div>
         </article>
         <article class="answer-card">
           <div class="answer-question">Is the pump/system okay?</div>
-          <div class="answer-value" id="driverSystemValue">Normal</div>
-          <div class="answer-detail" id="driverSystemDetail">No active call-support condition</div>
+          <div class="answer-value" id="driverSystemValue">Checking</div>
+          <div class="answer-detail" id="driverSystemDetail">Waiting for telemetry.</div>
         </article>
         <article class="answer-card">
           <div class="answer-question">What should I do?</div>
-          <div class="answer-value" id="driverActionValue">Keep Running</div>
-          <div class="answer-detail" id="driverActionDetail">If status changes, contact dispatch or LOVIS support.</div>
+          <div class="answer-value" id="driverActionValue">Stand By</div>
+          <div class="answer-detail" id="driverActionDetail">Keep this page open while status loads.</div>
         </article>
       </div>
 
@@ -2161,12 +2161,27 @@
       return `${Math.floor(minutes / 60)}h`;
     }
 
+    function isTelemetryChecking() {
+      return !liveDataLoaded && !liveDataError && !lastCloudUpdateAt;
+    }
+
     function updateDriverAnswers(faultActive) {
+      const checkingTelemetry = isTelemetryChecking();
       const hasLastGood = lastCloudUpdateAt > 0;
       const lastSeenSeconds = hasLastGood ? Math.max(0, Math.floor((Date.now() - lastCloudUpdateAt) / 1000)) : NaN;
       const lastSeenText = lastSeenSeconds >= 60
         ? `${Math.floor(lastSeenSeconds / 60)} min ago`
         : (Number.isFinite(lastSeenSeconds) ? `${lastSeenSeconds}s ago` : "never");
+
+      if (checkingTelemetry) {
+        document.getElementById("driverConnectionValue").textContent = "Checking";
+        document.getElementById("driverConnectionDetail").textContent = "Loading vehicle status...";
+        document.getElementById("driverSystemValue").textContent = "Checking";
+        document.getElementById("driverSystemDetail").textContent = "Waiting for telemetry.";
+        document.getElementById("driverActionValue").textContent = "Stand By";
+        document.getElementById("driverActionDetail").textContent = "Keep this page open while status loads.";
+        return;
+      }
 
       document.getElementById("driverConnectionValue").textContent = deviceOnline ? "Online" : "Offline";
       document.getElementById("driverConnectionDetail").textContent = deviceOnline
@@ -2204,10 +2219,11 @@
 
       if (liveDataLoaded) {
         deviceOnline = nowMs - lastCloudUpdateAt <= LIVE_OFFLINE_AFTER_MS;
-      } else {
+      } else if (!isTelemetryChecking()) {
         deviceOnline = false;
       }
 
+      const checkingTelemetry = isTelemetryChecking();
       const nextSeconds = deviceOnline ? (nextCloudUpdateAt - nowMs) / 1000 : NaN;
       const hasLastGood = lastCloudUpdateAt > 0;
       const lastSeenSeconds = hasLastGood ? Math.max(0, Math.floor((nowMs - lastCloudUpdateAt) / 1000)) : NaN;
@@ -2217,19 +2233,23 @@
       const supportRemainingSeconds = supportModeActive ? Math.max(0, (supportModeEndsAt - nowMs) / 1000) : 0;
       const supportPercent = supportModeActive ? Math.max(0, Math.min(100, (supportRemainingSeconds / SUPPORT_DURATION_SECONDS) * 100)) : 0;
 
-      document.getElementById("deviceStateText").textContent = deviceOnline ? "Online" : "Offline";
+      document.getElementById("deviceStateText").textContent = checkingTelemetry ? "Checking" : (deviceOnline ? "Online" : "Offline");
       const deviceBadge = document.getElementById("deviceBadge");
-      deviceBadge.textContent = deviceOnline ? "ONLINE" : "OFFLINE";
-      deviceBadge.className = `badge ${deviceOnline ? "ok" : "bad"}`;
-      document.getElementById("deviceDetail").textContent = liveDataError && !liveRows.length
-        ? liveDataError
-        : (hasLastGood ? `Last contact ${lastSeenLong}` : "Waiting for first live reading");
+      deviceBadge.textContent = checkingTelemetry ? "LOADING" : (deviceOnline ? "ONLINE" : "OFFLINE");
+      deviceBadge.className = `badge ${checkingTelemetry ? "warn" : (deviceOnline ? "ok" : "bad")}`;
+      document.getElementById("deviceDetail").textContent = checkingTelemetry
+        ? "Loading vehicle status..."
+        : (liveDataError && !liveRows.length
+          ? liveDataError
+          : (hasLastGood ? `Last contact ${lastSeenLong}` : "Waiting for first live reading"));
       document.getElementById("connectionToggleBtn").textContent = "Refresh Now";
 
       document.getElementById("nextUpdateValue").textContent = deviceOnline ? formatCountdown(nextSeconds) : "--";
-      document.getElementById("publishCadence").textContent = deviceOnline
-        ? (supportModeActive ? "Support: all fields every 15-20s" : normalCadenceLabel())
-        : "Waiting for device";
+      document.getElementById("publishCadence").textContent = checkingTelemetry
+        ? "Checking server telemetry"
+        : (deviceOnline
+          ? (supportModeActive ? "Support: all fields every 15-20s" : normalCadenceLabel())
+          : "Waiting for device");
 
       document.getElementById("supportState").textContent = supportModeActive ? "Support" : "Normal";
       document.getElementById("supportDetail").textContent = supportModeActive
@@ -2252,11 +2272,12 @@
     }
 
     function updateStatus() {
+      const checkingTelemetry = isTelemetryChecking();
       const faultActive = hasActiveFault();
-      document.getElementById("statusTitle").textContent = !deviceOnline ? "Device Offline" : (faultActive ? "Service Required" : "Normal Operation");
+      document.getElementById("statusTitle").textContent = checkingTelemetry ? "Checking Vehicle" : (!deviceOnline ? "Device Offline" : (faultActive ? "Service Required" : "Normal Operation"));
       const badge = document.getElementById("statusBadge");
-      badge.textContent = !deviceOnline ? "OFFLINE" : (faultActive ? "CALL TECH" : "OK");
-      badge.className = `badge ${!deviceOnline || faultActive ? "bad" : "ok"}`;
+      badge.textContent = checkingTelemetry ? "LOADING" : (!deviceOnline ? "OFFLINE" : (faultActive ? "CALL TECH" : "OK"));
+      badge.className = `badge ${checkingTelemetry ? "warn" : (!deviceOnline || faultActive ? "bad" : "ok")}`;
       document.getElementById("unitIdValue").textContent = latest.unitID ? String(latest.unitID) : "--";
       document.getElementById("lastUpdateValue").textContent = formatClock(latest.lastUpdate);
       const ccpValue = Number(latest.ccpSuccessPct);
