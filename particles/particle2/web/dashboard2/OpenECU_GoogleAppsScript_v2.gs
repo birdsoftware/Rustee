@@ -88,8 +88,16 @@ const LEGACY_FALLBACK_INDEXES = {
   greenPulses: 47
 };
 
+function ensureSheetColumns(sheet) {
+  const missingColumns = COLUMNS.length - sheet.getMaxColumns();
+  if (missingColumns > 0) {
+    sheet.insertColumnsAfter(sheet.getMaxColumns(), missingColumns);
+  }
+}
+
 function setupSheet() {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  ensureSheetColumns(sheet);
   sheet.getRange(1, 1, 2, COLUMNS.length).setValues([
     COLUMNS.map(function(column) { return column.owner; }),
     COLUMNS.map(function(column) { return column.header; })
@@ -131,6 +139,7 @@ function value(json, key) {
 
 function doPost(e) {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  ensureSheetColumns(sheet);
   const json = parseParticlePayload(e);
 
   sheet.appendRow(COLUMNS.map(function(column) {
