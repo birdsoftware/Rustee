@@ -469,7 +469,7 @@
 
     .status-details {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
+      grid-template-columns: repeat(3, 1fr);
       gap: 10px;
     }
 
@@ -498,6 +498,16 @@
     .fault-info-btn {
       margin-top: 6px;
       color: var(--warn);
+    }
+
+    .fault-status-kv {
+      grid-column: 1 / -1;
+      padding-top: 10px;
+      border-top: 1px solid rgba(148, 163, 184, 0.14);
+    }
+
+    .fault-status-kv .kv-value {
+      overflow-wrap: anywhere;
     }
 
     .metric {
@@ -1064,7 +1074,7 @@
             <div class="kv-label">CCP Success</div>
             <div class="kv-value" id="ccpValue">100.0%</div>
           </div>
-          <div class="status-kv">
+          <div class="status-kv fault-status-kv">
             <div class="kv-label">Fault</div>
             <div class="kv-value" id="faultSummaryValue">--</div>
             <button class="text-btn fault-info-btn" id="faultInfoBtn" type="button" hidden>More Info</button>
