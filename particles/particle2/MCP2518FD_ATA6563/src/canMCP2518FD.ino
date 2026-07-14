@@ -127,6 +127,7 @@ LiveValue canMcuDcCurrent        = { NAN, 0 };
 LiveValue canGeneratorTemp       = { NAN, 0 };
 LiveValue canGeneratorSensorErr  = { NAN, 0 };
 LiveValue canDoorInterlock       = { NAN, 0 };
+LiveValue logRedPulses           = { NAN, 0 };
 LiveValue logPumpFrozen          = { NAN, 0 };
 LiveValue logPrechargeTimeout    = { NAN, 0 };
 LiveValue logMcuStartupStatus    = { NAN, 0 };
@@ -134,6 +135,7 @@ LiveValue logMcuHeartbeat        = { NAN, 0 };
 LiveValue logMcuCanTimeout       = { NAN, 0 };
 LiveValue logIgnorePressure      = { NAN, 0 };
 LiveValue logIgnoreCabTemps      = { NAN, 0 };
+LiveValue logGreenPulses         = { NAN, 0 };
 LiveValue logFatalError          = { NAN, 0 };
 LiveValue logErrorCode           = { NAN, 0 };
 LiveValue mfsmWakeInverter       = { NAN, 0 };
@@ -176,6 +178,7 @@ SymbolSpec symbols[] = {
     { 0x40002970, "MFSM_ClosePosContact",   ID_TRAILER_CRO, TYPE_ENUM32, 4, 0, 1, &mfsmClosePosContact },
     { 0x40002974, "MFSM_CloseNegContact",   ID_TRAILER_CRO, TYPE_ENUM32, 4, 0, 1, &mfsmCloseNegContact },
     { 0x4000298C, "Log_TorqueRefPercent",   ID_TRAILER_CRO, TYPE_F32, 4, -200, 200, &logTorqueRefPercent },
+    { 0x400029A0, "Log_RedPulses",          ID_TRAILER_CRO, TYPE_U8, 1, 0, 255, &logRedPulses },
     { 0x400029AC, "Log_PumpFrozen",         ID_TRAILER_CRO, TYPE_ENUM32, 4, 0, 1, &logPumpFrozen },
     { 0x400029B4, "Log_PrechargeTimeout",   ID_TRAILER_CRO, TYPE_ENUM32, 4, 0, 1, &logPrechargeTimeout },
     { 0x400029C0, "Log_McuStartupStatus",   ID_TRAILER_CRO, TYPE_F32, 4, -100000, 100000, &logMcuStartupStatus },
@@ -183,6 +186,7 @@ SymbolSpec symbols[] = {
     { 0x400029C8, "Log_McuCanTimeout",      ID_TRAILER_CRO, TYPE_ENUM32, 4, 0, 1, &logMcuCanTimeout },
     { 0x400029E0, "Log_IgnorePressureSensors", ID_TRAILER_CRO, TYPE_ENUM32, 4, 0, 1, &logIgnorePressure },
     { 0x400029E4, "Log_IgnoreCabEnclosureTempSensors", ID_TRAILER_CRO, TYPE_ENUM32, 4, 0, 1, &logIgnoreCabTemps },
+    { 0x400029F0, "Log_GreenPulses",        ID_TRAILER_CRO, TYPE_U8, 1, 0, 255, &logGreenPulses },
     { 0x400029FC, "Log_FatalError",         ID_TRAILER_CRO, TYPE_ENUM32, 4, 0, 1, &logFatalError },
     { 0x40002A00, "Log_ErrorCode",          ID_TRAILER_CRO, TYPE_ENUM32, 4, 0, 4294967295.0, &logErrorCode },
     { 0x40002A18, "CI_TankerPressure",      ID_TRAILER_CRO, TYPE_F32, 4, -100, 100, &ciTankerPressure },
@@ -931,6 +935,7 @@ void publishToCloud() {
         "\"pumpFrozen\":%.0f,\"prechargeTimeout\":%.0f,"
         "\"mcuStartupStatus\":%.2f,\"mcuHeartbeat\":%.0f,\"mcuCanTimeout\":%.0f,"
         "\"ignorePressureSensors\":%.0f,\"ignoreCabTempSensors\":%.0f,"
+        "\"redPulses\":%.0f,\"greenPulses\":%.0f,"
         "\"fatalError\":%.0f,\"errorCode\":%.0f,"
         "\"wakeInverter\":%.0f,\"startPrecharge\":%.0f,\"restartRequest\":%.0f,"
         "\"ignoreErrors\":%.0f,\"closePosContact\":%.0f,\"closeNegContact\":%.0f,"
@@ -966,6 +971,8 @@ void publishToCloud() {
         logMcuCanTimeout.value,
         logIgnorePressure.value,
         logIgnoreCabTemps.value,
+        logRedPulses.value,
+        logGreenPulses.value,
         logFatalError.value,
         logErrorCode.value,
         mfsmWakeInverter.value,

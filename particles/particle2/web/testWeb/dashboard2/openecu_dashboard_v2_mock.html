@@ -469,7 +469,7 @@
 
     .status-details {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
+      grid-template-columns: repeat(4, 1fr);
       gap: 10px;
     }
 
@@ -493,6 +493,11 @@
     .kv-value {
       font-size: 18px;
       font-weight: 900;
+    }
+
+    .fault-info-btn {
+      margin-top: 6px;
+      color: var(--warn);
     }
 
     .metric {
@@ -827,6 +832,10 @@
       font-size: 22px;
     }
 
+    .login-panel .status-details {
+      grid-template-columns: repeat(2, 1fr);
+    }
+
     .login-actions {
       display: flex;
       gap: 10px;
@@ -1055,6 +1064,11 @@
             <div class="kv-label">CCP Success</div>
             <div class="kv-value" id="ccpValue">100.0%</div>
           </div>
+          <div class="status-kv">
+            <div class="kv-label">Fault</div>
+            <div class="kv-value" id="faultSummaryValue">--</div>
+            <button class="text-btn fault-info-btn" id="faultInfoBtn" type="button" hidden>More Info</button>
+          </div>
         </div>
       </article>
       <article class="metric" data-field="dcVoltage"></article>
@@ -1219,6 +1233,36 @@
     </section>
   </div>
 
+  <div class="modal" id="faultInfoModal" role="dialog" aria-modal="true" aria-labelledby="faultInfoTitle">
+    <section class="login-panel">
+      <h2 id="faultInfoTitle">Fault Details</h2>
+      <p class="modal-copy" id="faultInfoSummary">No active error code is available.</p>
+      <div class="status-details">
+        <div class="status-kv">
+          <div class="kv-label">Internal Code</div>
+          <div class="kv-value" id="faultInternalCode">--</div>
+        </div>
+        <div class="status-kv">
+          <div class="kv-label">Display Code</div>
+          <div class="kv-value" id="faultDisplayCode">--</div>
+        </div>
+        <div class="status-kv">
+          <div class="kv-label">Green Pulses</div>
+          <div class="kv-value" id="faultGreenPulses">--</div>
+        </div>
+        <div class="status-kv">
+          <div class="kv-label">Red Pulses</div>
+          <div class="kv-value" id="faultRedPulses">--</div>
+        </div>
+      </div>
+      <ul class="modal-list" id="faultInfoChecks"></ul>
+      <p class="modal-copy" id="faultInfoClearAction"></p>
+      <div class="login-actions">
+        <button class="primary-btn" id="closeFaultInfoBtn" type="button">Done</button>
+      </div>
+    </section>
+  </div>
+
   <div class="modal" id="inviteModal" role="dialog" aria-modal="true" aria-labelledby="inviteModalTitle">
     <form class="login-panel" id="inviteForm">
       <h2 id="inviteModalTitle">Complete Invitation</h2>
@@ -1301,6 +1345,8 @@
       { key: "mcuCanTimeout", label: "MCU CAN Timeout", address: "0x400029C8", role: "Tech", group: "faults", type: "bool", units: "", decimals: 0 },
       { key: "ignorePressureSensors", label: "Ignore Pressure Sensors", address: "0x400029E0", role: "Tech", group: "override", type: "bool", units: "", decimals: 0 },
       { key: "ignoreCabTempSensors", label: "Ignore Cab Enclosure Temp Sensors", address: "0x400029E4", role: "Tech", group: "override", type: "bool", units: "", decimals: 0 },
+      { key: "redPulses", label: "Red Pulses", address: "0x400029A0", role: "Tech", group: "faults", type: "number", units: "", decimals: 0 },
+      { key: "greenPulses", label: "Green Pulses", address: "0x400029F0", role: "Tech", group: "faults", type: "number", units: "", decimals: 0 },
       { key: "fatalError", label: "Fatal Error", address: "0x400029FC", role: "Tech", group: "faults", type: "bool", units: "", decimals: 0 },
       { key: "errorCode", label: "Error Code", address: "0x40002A00", role: "Tech", group: "faults", type: "enum", units: "", decimals: 0 },
       { key: "wakeInverter", label: "Wake Inverter", address: "0x40002938", role: "Tech", group: "state", type: "bool", units: "", decimals: 0 },
@@ -1342,6 +1388,8 @@
       mcuCanTimeout: null,
       ignorePressureSensors: null,
       ignoreCabTempSensors: null,
+      redPulses: null,
+      greenPulses: null,
       fatalError: null,
       errorCode: null,
       wakeInverter: null,
@@ -1385,6 +1433,8 @@
       { key: "mcuCanTimeout", label: "MCU CAN Timeout" },
       { key: "ignorePressureSensors", label: "Ignore Pressure" },
       { key: "ignoreCabTempSensors", label: "Ignore Cab Temp" },
+      { key: "redPulses", label: "Red Pulses" },
+      { key: "greenPulses", label: "Green Pulses" },
       { key: "fatalError", label: "Fatal Error" },
       { key: "errorCode", label: "Error Code" },
       { key: "wakeInverter", label: "Wake Inverter" },
@@ -1397,6 +1447,53 @@
       { key: "frames", label: "Frames" },
       { key: "ccpSuccessPct", label: "CCP Success" },
       { key: "mode", label: "Mode" }
+    ];
+
+    const dryDriveErrors = [
+      { internalCode: 1, displayCode: 22, greenPulses: 2, redPulses: 2, title: "Generator High Temperature" },
+      { internalCode: 2, displayCode: 23, greenPulses: 2, redPulses: 3, title: "Generator Temperature Sensor Fault" },
+      { internalCode: 3, displayCode: 24, greenPulses: 2, redPulses: 4, title: "Rectifier Enclosure High Temperature" },
+      { internalCode: 4, displayCode: 25, greenPulses: 2, redPulses: 5, title: "Rectifier Enclosure Temperature Sensor Fault" },
+      { internalCode: 5, displayCode: 26, greenPulses: 2, redPulses: 6, title: "Trailer Side Enclosure High Temperature" },
+      { internalCode: 6, displayCode: 27, greenPulses: 2, redPulses: 7, title: "Trailer Side Enclosure Temperature Sensor Fault" },
+      {
+        internalCode: 7,
+        displayCode: 28,
+        greenPulses: 2,
+        redPulses: 8,
+        title: "Motor Controller Fault",
+        summary: "The motor controller has its own ECU, and this fault covers faults reported by that controller. Wiring, connectors, moisture, motor wire damage, or starting when the PTO is available but not engaged are common checks.",
+        checks: [
+          "Check the trailer side enclosure for loose connectors, wet connectors, or water.",
+          "Inspect motor wiring for cuts or other damage.",
+          "Confirm the PTO is engaged before starting the DryDrive system.",
+          "If the fault persists, contact DryDrive or LOVIS support."
+        ],
+        clearAction: "This is a standard fault. Cycle panel power to clear it after the cause has been checked."
+      },
+      { internalCode: 8, displayCode: 29, greenPulses: 2, redPulses: 9, title: "Main Power Fault" },
+      { internalCode: 9, displayCode: 31, greenPulses: 3, redPulses: 1, title: "Pump Back-Driven Direction Fault" },
+      { internalCode: 10, displayCode: 32, greenPulses: 3, redPulses: 2, title: "Tanker On-Load Overpressure" },
+      { internalCode: 11, displayCode: 33, greenPulses: 3, redPulses: 3, title: "Tanker Off-Load Over Vacuum" },
+      { internalCode: 12, displayCode: 34, greenPulses: 3, redPulses: 4, title: "Tanker Off-Load Over Pressure" },
+      { internalCode: 13, displayCode: 35, greenPulses: 3, redPulses: 5, title: "Tanker Pressure Sensor Disconnected" },
+      { internalCode: 14, displayCode: 36, greenPulses: 3, redPulses: 6, title: "External Pressure Sensor Disconnected" },
+      { internalCode: 15, displayCode: 42, greenPulses: 4, redPulses: 2, title: "Precharge Timeout" },
+      { internalCode: 16, displayCode: 43, greenPulses: 4, redPulses: 3, title: "Obstructed Pump" },
+      { internalCode: 17, displayCode: 52, greenPulses: 5, redPulses: 2, title: "Tanker High Level" },
+      { internalCode: 18, displayCode: 58, greenPulses: 5, redPulses: 8, title: "HVIL or Trailer Power Cycled" },
+      { internalCode: 19, displayCode: 62, greenPulses: 6, redPulses: 2, title: "Truck Enclosure ECU CAN-Bus Communication Timeout" },
+      { internalCode: 20, displayCode: 63, greenPulses: 6, redPulses: 3, title: "Button Panel CAN-Bus Communication Timeout" },
+      { internalCode: 21, displayCode: 64, greenPulses: 6, redPulses: 4, title: "Motor Controller CAN-Bus Communication Timeout" },
+      { internalCode: 22, displayCode: 65, greenPulses: 6, redPulses: 5, title: "IMD CAN-Bus Communication Timeout" },
+      { internalCode: 23, displayCode: 66, greenPulses: 6, redPulses: 6, title: "Truck J1939 CAN-Bus Communication Timeout" },
+      { internalCode: 24, displayCode: 71, greenPulses: 7, redPulses: 1, title: "Welded Contactor Contacts" },
+      { internalCode: 25, displayCode: 72, greenPulses: 7, redPulses: 2, title: "IMD Voltage Isolation" },
+      { internalCode: 26, displayCode: 73, greenPulses: 7, redPulses: 3, title: "IMD Over Voltage" },
+      { internalCode: 27, displayCode: 74, greenPulses: 7, redPulses: 4, title: "IMD Voltage Isolation Uncertainty" },
+      { internalCode: 28, displayCode: 75, greenPulses: 7, redPulses: 5, title: "IMD Over Voltage Uncertainty" },
+      { internalCode: 29, displayCode: 76, greenPulses: 7, redPulses: 6, title: "PTO Override Valve Latched Closed" },
+      { internalCode: 30, displayCode: 77, greenPulses: 7, redPulses: 7, title: "Precharge Circuit Disconnected" }
     ];
 
     const charts = {};
@@ -1500,6 +1597,8 @@
         mcuCanTimeout: liveNumber(row, ["mcuCanTimeout", "Log_McuCanTimeout"], latest.mcuCanTimeout),
         ignorePressureSensors: liveNumber(row, ["ignorePressureSensors", "Log_IgnorePressureSensors"], latest.ignorePressureSensors),
         ignoreCabTempSensors: liveNumber(row, ["ignoreCabTempSensors", "Log_IgnoreCabEnclosureTempSensors"], latest.ignoreCabTempSensors),
+        redPulses: liveNumber(row, ["redPulses", "Log_RedPulses"], latest.redPulses),
+        greenPulses: liveNumber(row, ["greenPulses", "Log_GreenPulses"], latest.greenPulses),
         fatalError: liveNumber(row, ["fatalError", "Log_FatalError"], latest.fatalError),
         errorCode: liveNumber(row, ["errorCode", "Log_ErrorCode"], latest.errorCode),
         wakeInverter: liveNumber(row, ["wakeInverter", "MFSM_WakeInverter"], latest.wakeInverter),
@@ -1548,6 +1647,8 @@
       latest.mcuCanTimeout = row.mcuCanTimeout;
       latest.ignorePressureSensors = row.ignorePressureSensors;
       latest.ignoreCabTempSensors = row.ignoreCabTempSensors;
+      latest.redPulses = row.redPulses;
+      latest.greenPulses = row.greenPulses;
       latest.fatalError = row.fatalError;
       latest.errorCode = row.errorCode;
       latest.wakeInverter = row.wakeInverter;
@@ -2142,9 +2243,62 @@
       setSettingsMenuOpen(document.getElementById("settingsMenu").hidden);
     }
 
+    function activeErrorCode() {
+      const code = Number(latest.errorCode);
+      return Number.isFinite(code) && code > 0 ? Math.round(code) : 0;
+    }
+
+    function currentDryDriveError() {
+      const code = activeErrorCode();
+      return dryDriveErrors.find(error => error.internalCode === code) || null;
+    }
+
+    function pulseDisplayValue(key, fallback) {
+      const value = Number(latest[key]);
+      return Number.isFinite(value) ? String(Math.round(value)) : String(fallback ?? "--");
+    }
+
     function hasActiveFault() {
       return ["fatalError", "mcuCanTimeout", "rectifierSensorError", "generatorSensorError", "pumpFrozen", "prechargeTimeout"]
-        .some(key => Number(latest[key]) === 1);
+        .some(key => Number(latest[key]) === 1) || activeErrorCode() > 0;
+    }
+
+    function updateFaultSummary() {
+      const code = activeErrorCode();
+      const info = currentDryDriveError();
+      const button = document.getElementById("faultInfoBtn");
+
+      if (!code) {
+        document.getElementById("faultSummaryValue").textContent = "--";
+        button.hidden = true;
+        return;
+      }
+
+      document.getElementById("faultSummaryValue").textContent = info
+        ? `${info.displayCode}: ${info.title}`
+        : `Code ${code}`;
+      button.hidden = false;
+    }
+
+    function openFaultInfoModal() {
+      const code = activeErrorCode();
+      const info = currentDryDriveError();
+      const title = info ? info.title : `Error Code ${code || "--"}`;
+
+      document.getElementById("faultInfoTitle").textContent = title;
+      document.getElementById("faultInfoSummary").textContent = info?.summary || (code
+        ? "This code is recognized by telemetry, but detailed troubleshooting notes have not been captured in the dashboard yet. Use the display code and pulse pattern with the DryDrive fault guide."
+        : "No active error code is available.");
+      document.getElementById("faultInternalCode").textContent = code || "--";
+      document.getElementById("faultDisplayCode").textContent = info?.displayCode ?? "--";
+      document.getElementById("faultGreenPulses").textContent = info ? pulseDisplayValue("greenPulses", info.greenPulses) : pulseDisplayValue("greenPulses");
+      document.getElementById("faultRedPulses").textContent = info ? pulseDisplayValue("redPulses", info.redPulses) : pulseDisplayValue("redPulses");
+      document.getElementById("faultInfoChecks").innerHTML = (info?.checks || [
+        "Confirm the live error code, red pulses, and green pulses match the service documentation.",
+        "Contact LOVIS support if the fault remains active."
+      ]).map(item => `<li>${item}</li>`).join("");
+      document.getElementById("faultInfoClearAction").textContent = info?.clearAction || "";
+      document.getElementById("faultInfoModal").classList.add("active");
     }
 
     function formatClock(value) {
@@ -2282,6 +2436,7 @@
       document.getElementById("lastUpdateValue").textContent = formatClock(latest.lastUpdate);
       const ccpValue = Number(latest.ccpSuccessPct);
       document.getElementById("ccpValue").textContent = Number.isFinite(ccpValue) ? `${ccpValue.toFixed(1)}%` : "--";
+      updateFaultSummary();
       document.querySelectorAll("#mainStatus [data-field]").forEach(container => {
         renderMetric(container, container.dataset.field, "Latest reading");
       });
@@ -2693,6 +2848,15 @@
     document.getElementById("offlineInfoModal").addEventListener("click", event => {
       if (event.target.id === "offlineInfoModal") {
         document.getElementById("offlineInfoModal").classList.remove("active");
+      }
+    });
+    document.getElementById("faultInfoBtn").addEventListener("click", openFaultInfoModal);
+    document.getElementById("closeFaultInfoBtn").addEventListener("click", () => {
+      document.getElementById("faultInfoModal").classList.remove("active");
+    });
+    document.getElementById("faultInfoModal").addEventListener("click", event => {
+      if (event.target.id === "faultInfoModal") {
+        document.getElementById("faultInfoModal").classList.remove("active");
       }
     });
     document.getElementById("rawSpreadsheetBtn").addEventListener("click", showSpreadsheet);

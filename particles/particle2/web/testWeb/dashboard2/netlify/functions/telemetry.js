@@ -188,6 +188,8 @@ function normalizeSheetRow(row) {
     mcuCanTimeout: numberValue(row, ["mcuCanTimeout", "Log_McuCanTimeout"]),
     ignorePressureSensors: numberValue(row, ["ignorePressureSensors", "Log_IgnorePressureSensors"]),
     ignoreCabTempSensors: numberValue(row, ["ignoreCabTempSensors", "Log_IgnoreCabEnclosureTempSensors"]),
+    redPulses: numberValue(row, ["redPulses", "Log_RedPulses"]),
+    greenPulses: numberValue(row, ["greenPulses", "Log_GreenPulses"]),
     fatalError: numberValue(row, ["fatalError", "Log_FatalError"]),
     errorCode: numberValue(row, ["errorCode", "Log_ErrorCode"]),
     wakeInverter: numberValue(row, ["wakeInverter", "MFSM_WakeInverter"]),

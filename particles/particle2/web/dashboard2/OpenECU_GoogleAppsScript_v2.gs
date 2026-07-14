@@ -44,7 +44,9 @@ const COLUMNS = [
   { owner: "TRAILER_ECU", header: "MFSM_IgnoreErrors", jsonKey: "ignoreErrors" },
   { owner: "TRAILER_ECU", header: "MFSM_ClosePosContact", jsonKey: "closePosContact" },
   { owner: "TRAILER_ECU", header: "MFSM_CloseNegContact", jsonKey: "closeNegContact" },
-  { owner: "TRAILER_ECU", header: "Log_TorqueRefPercent", jsonKey: "torqueRefPercent" }
+  { owner: "TRAILER_ECU", header: "Log_TorqueRefPercent", jsonKey: "torqueRefPercent" },
+  { owner: "TRAILER_ECU", header: "Log_RedPulses", jsonKey: "redPulses" },
+  { owner: "TRAILER_ECU", header: "Log_GreenPulses", jsonKey: "greenPulses" }
 ];
 
 const LEGACY_FALLBACK_INDEXES = {
@@ -81,7 +83,9 @@ const LEGACY_FALLBACK_INDEXES = {
   ignoreErrors: 42,
   closePosContact: 43,
   closeNegContact: 44,
-  torqueRefPercent: 45
+  torqueRefPercent: 45,
+  redPulses: 46,
+  greenPulses: 47
 };
 
 function setupSheet() {
