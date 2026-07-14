@@ -1076,7 +1076,7 @@
           </div>
           <div class="status-kv fault-status-kv">
             <div class="kv-label">Fault</div>
-            <div class="kv-value" id="faultSummaryValue">--</div>
+            <div class="kv-value" id="faultSummaryValue">Checking</div>
             <button class="text-btn fault-info-btn" id="faultInfoBtn" type="button" hidden>More Info</button>
           </div>
         </div>
@@ -2279,7 +2279,7 @@
       const button = document.getElementById("faultInfoBtn");
 
       if (!code) {
-        document.getElementById("faultSummaryValue").textContent = "--";
+        document.getElementById("faultSummaryValue").textContent = isTelemetryChecking() ? "Checking" : "None";
         button.hidden = true;
         return;
       }
