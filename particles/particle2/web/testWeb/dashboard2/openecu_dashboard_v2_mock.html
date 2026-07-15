@@ -959,6 +959,7 @@
       <input id="loginEmail" type="email" autocomplete="email" required />
       <label for="loginPassword" class="kv-label">Password</label>
       <input id="loginPassword" type="password" autocomplete="current-password" required />
+      <button class="text-btn" id="loginShowPasswordBtn" type="button" aria-pressed="false">Show password</button>
       <div class="error" id="loginError"></div>
       <button class="text-btn" id="loginForgotPasswordBtn" type="button">Forgot password?</button>
       <button class="primary-btn" id="loginPageSubmitBtn" type="submit">Sign In</button>
@@ -1114,6 +1115,7 @@
         <article class="metric" data-field="pumpHighRPM"></article>
         <article class="metric" data-field="rectifierTemp"></article>
         <article class="metric" data-field="motorTemp"></article>
+        <article class="metric" data-field="generatorTemp"></article>
       </div>
     </section>
 
@@ -2538,6 +2540,7 @@
       renderMetric(document.querySelector('#driverView [data-field="pumpHighRPM"]'), "pumpHighRPM", "High speed setpoint");
       renderMetric(document.querySelector('#driverView [data-field="rectifierTemp"]'), "rectifierTemp", "Current reading");
       renderMetric(document.querySelector('#driverView [data-field="motorTemp"]'), "motorTemp", "Current reading");
+      renderMetric(document.querySelector('#driverView [data-field="generatorTemp"]'), "generatorTemp", "Current reading");
       updateStatus();
     }
 
@@ -2809,6 +2812,14 @@
         document.getElementById("loginEmail").value.trim(),
         document.getElementById("loginError")
       );
+    });
+    document.getElementById("loginShowPasswordBtn").addEventListener("click", () => {
+      const input = document.getElementById("loginPassword");
+      const button = document.getElementById("loginShowPasswordBtn");
+      const showPassword = input.type === "password";
+      input.type = showPassword ? "text" : "password";
+      button.textContent = showPassword ? "Hide password" : "Show password";
+      button.setAttribute("aria-pressed", String(showPassword));
     });
     document.getElementById("driverBtn").addEventListener("click", showDriver);
     document.getElementById("techBtn").addEventListener("click", showTech);
