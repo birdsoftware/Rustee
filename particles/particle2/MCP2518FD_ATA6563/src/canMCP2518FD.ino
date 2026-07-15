@@ -85,6 +85,7 @@ static const unsigned long REQUEST_PERIOD_MS = 75;
 static const unsigned long REQUEST_TIMEOUT_MS = 1000;
 static const bool ENABLE_DCCL_BCAST_FILTER = false;
 static const unsigned long PUBLISH_PERIOD_MS = 60000;
+static const unsigned long FAULT_CHANGE_PUBLISH_DELAY_MS = 300;
 static const char *PUBLISH_EVENT_NAME = "dht_reading";
 
 // Keep the hot path quiet. Full CCP trace is useful for discovery, but it is
@@ -249,6 +250,7 @@ unsigned long lastCycleMs = 0;
 unsigned long lastRequestAt = 0;
 unsigned long lastStatus = 0;
 unsigned long lastPublish = 0;
+unsigned long faultChangeDetectedAt = 0;
 uint16_t ccpTracePrinted = 0;
 uint16_t matchTracePrinted = 0;
 uint8_t nextCtrTrailer = 0x10;
@@ -256,6 +258,7 @@ uint8_t nextCtrCab = 0x80;
 uint8_t pollIndex = 0;
 bool activePollingEnabled = ACTIVE_REQUESTS;
 bool activeDisabledByExternalMaster = false;
+bool faultChangePublishPending = false;
 
 uint16_t makeCmd(uint16_t instruction, uint16_t address) {
     return (instruction << 12) | (address & 0x0FFF);
@@ -469,12 +472,36 @@ bool decodeValue(const SymbolSpec *sym, const uint8_t *data, double *out) {
     return false;
 }
 
+bool isFaultChangePublishSymbol(const SymbolSpec *sym) {
+    return strcmp(sym->name, "Log_FatalError") == 0 ||
+           strcmp(sym->name, "Log_ErrorCode") == 0;
+}
+
+void noteFaultChangeForFastPublish(const SymbolSpec *sym, double oldValue, double newValue) {
+    if (!isFaultChangePublishSymbol(sym) || isnan(oldValue) || oldValue == newValue) {
+        return;
+    }
+
+    faultChangePublishPending = true;
+    faultChangeDetectedAt = millis();
+
+    Serial.print("Fault fast publish pending: ");
+    Serial.print(sym->name);
+    Serial.print(" ");
+    Serial.print(oldValue, 0);
+    Serial.print(" -> ");
+    Serial.println(newValue, 0);
+}
+
 bool storeDecodedValue(const SymbolSpec *sym, double value) {
     if (value < sym->minValue || value > sym->maxValue) {
         return false;
     }
+
+    double oldValue = sym->live->value;
     sym->live->value = value;
     sym->live->updatedAt = millis();
+    noteFaultChangeForFastPublish(sym, oldValue, value);
     return true;
 }
 
@@ -1005,6 +1032,21 @@ void publishToCloud() {
     Serial.println(written);
 }
 
+void serviceFaultChangePublish() {
+    if (!faultChangePublishPending) {
+        return;
+    }
+
+    if (millis() - faultChangeDetectedAt < FAULT_CHANGE_PUBLISH_DELAY_MS) {
+        return;
+    }
+
+    faultChangePublishPending = false;
+    lastPublish = millis();
+    Serial.println("Fault changed; publishing immediately.");
+    publishToCloud();
+}
+
 void initCAN() {
     Serial.println();
     Serial.println("MCP2518FD OpenECU CCP active requester v9 no gear publish");
@@ -1126,6 +1168,7 @@ void loop() {
     serviceOverflow();
     checkActiveTimeouts();
     serviceActivePolling();
+    serviceFaultChangePublish();
 
     if (millis() - lastPublish >= PUBLISH_PERIOD_MS) {
         lastPublish = millis();
