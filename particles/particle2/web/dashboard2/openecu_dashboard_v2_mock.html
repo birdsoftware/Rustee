@@ -1510,51 +1510,422 @@
       { key: "mode", label: "Mode" }
     ];
 
+    const clearByPanelPower = "This is a standard fault. Cycle panel power to clear it after the cause has been checked.";
+    const clearByIgnition = "This is a safety fault. Cycle truck ignition off/on to clear it after the cause has been checked.";
+    const temperatureSensorChecks = sensorName => [
+      `Check ${sensorName} wiring and connector condition.`,
+      "The sensor is likely faulty if raw voltage is outside the normal operating threshold.",
+      "Contact DryDrive or LOVIS support for sensor replacement guidance."
+    ];
+    const pressureSensorChecks = sensorName => [
+      `Check ${sensorName} wiring and connector condition.`,
+      "The sensor is likely faulty if raw voltage is outside the normal operating threshold.",
+      "Contact DryDrive or LOVIS support for pressure sensor replacement guidance."
+    ];
+    const canTimeoutChecks = nodeName => [
+      `${nodeName} stopped communicating on the DryDrive CAN bus beyond the allowed timeout.`,
+      "Check the enclosure connectors and CAN wiring associated with this node.",
+      "If the fault returns after reset, contact DryDrive or LOVIS support."
+    ];
+
     const dryDriveErrors = [
-      { internalCode: 1, displayCode: 22, greenPulses: 2, redPulses: 2, title: "Generator High Temperature" },
-      { internalCode: 2, displayCode: 23, greenPulses: 2, redPulses: 3, title: "Generator Temperature Sensor Fault" },
-      { internalCode: 3, displayCode: 24, greenPulses: 2, redPulses: 4, title: "Rectifier Enclosure High Temperature" },
-      { internalCode: 4, displayCode: 25, greenPulses: 2, redPulses: 5, title: "Rectifier Enclosure Temperature Sensor Fault" },
-      { internalCode: 5, displayCode: 26, greenPulses: 2, redPulses: 6, title: "Trailer Side Enclosure High Temperature" },
-      { internalCode: 6, displayCode: 27, greenPulses: 2, redPulses: 7, title: "Trailer Side Enclosure Temperature Sensor Fault" },
+      {
+        internalCode: 1,
+        displayCode: 22,
+        greenPulses: 2,
+        redPulses: 2,
+        title: "Generator High Temperature",
+        summary: "The generator exceeded its high temperature limit. The generator is liquid cooled, so this usually points to a cooling system issue.",
+        checks: [
+          "Check coolant level.",
+          "Check for a faulty coolant pump.",
+          "Inspect radiator fins for blockage.",
+          "Look for kinked or restricted coolant lines."
+        ],
+        clearAction: clearByPanelPower
+      },
+      {
+        internalCode: 2,
+        displayCode: 23,
+        greenPulses: 2,
+        redPulses: 3,
+        title: "Generator Temperature Sensor Fault",
+        summary: "The generator temperature sensor raw voltage is outside the expected normal-operation range.",
+        checks: temperatureSensorChecks("generator temperature sensor"),
+        clearAction: clearByPanelPower
+      },
+      {
+        internalCode: 3,
+        displayCode: 24,
+        greenPulses: 2,
+        redPulses: 4,
+        title: "Rectifier Enclosure High Temperature",
+        summary: "The rectifier enclosure exceeded its high temperature limit. The rectifier enclosure base is liquid cooled, so this usually points to a cooling system issue.",
+        checks: [
+          "Check coolant level.",
+          "Check for a faulty coolant pump.",
+          "Inspect radiator fins for blockage.",
+          "Look for kinked or restricted coolant lines."
+        ],
+        clearAction: clearByPanelPower
+      },
+      {
+        internalCode: 4,
+        displayCode: 25,
+        greenPulses: 2,
+        redPulses: 5,
+        title: "Rectifier Enclosure Temperature Sensor Fault",
+        summary: "The rectifier enclosure temperature sensor raw voltage is outside the expected normal-operation range.",
+        checks: temperatureSensorChecks("rectifier enclosure temperature sensor"),
+        clearAction: clearByPanelPower
+      },
+      {
+        internalCode: 5,
+        displayCode: 26,
+        greenPulses: 2,
+        redPulses: 6,
+        title: "Trailer Side Enclosure High Temperature",
+        summary: "The trailer side enclosure exceeded its high temperature limit. This usually points to restricted or loose enclosure cooling fins.",
+        checks: [
+          "Inspect the enclosure cooling fins for mud or debris.",
+          "Confirm the cooling fins are secured to the enclosure.",
+          "Let the enclosure cool before restarting."
+        ],
+        clearAction: clearByPanelPower
+      },
+      {
+        internalCode: 6,
+        displayCode: 27,
+        greenPulses: 2,
+        redPulses: 7,
+        title: "Trailer Side Enclosure Temperature Sensor Fault",
+        summary: "The trailer side enclosure temperature sensor raw voltage is outside the expected normal-operation range.",
+        checks: temperatureSensorChecks("trailer side enclosure temperature sensor"),
+        clearAction: clearByPanelPower
+      },
       {
         internalCode: 7,
         displayCode: 28,
         greenPulses: 2,
         redPulses: 8,
         title: "Motor Controller Fault",
-        summary: "The motor controller has its own ECU, and this fault covers faults reported by that controller. Wiring, connectors, moisture, motor wire damage, or starting when the PTO is available but not engaged are common checks.",
+        summary: "The motor controller has its own ECU, and this code covers faults reported by that controller. Wiring, connectors, moisture, motor wire damage, or starting when PTO is available but not engaged are common causes.",
         checks: [
           "Check the trailer side enclosure for loose connectors, wet connectors, or water.",
           "Inspect motor wiring for cuts or other damage.",
           "Confirm the PTO is engaged before starting the DryDrive system.",
           "If the fault persists, contact DryDrive or LOVIS support."
         ],
-        clearAction: "This is a standard fault. Cycle panel power to clear it after the cause has been checked."
+        clearAction: clearByPanelPower
       },
-      { internalCode: 8, displayCode: 29, greenPulses: 2, redPulses: 9, title: "Main Power Fault" },
-      { internalCode: 9, displayCode: 31, greenPulses: 3, redPulses: 1, title: "Pump Back-Driven Direction Fault" },
-      { internalCode: 10, displayCode: 32, greenPulses: 3, redPulses: 2, title: "Tanker On-Load Overpressure" },
-      { internalCode: 11, displayCode: 33, greenPulses: 3, redPulses: 3, title: "Tanker Off-Load Over Vacuum" },
-      { internalCode: 12, displayCode: 34, greenPulses: 3, redPulses: 4, title: "Tanker Off-Load Over Pressure" },
-      { internalCode: 13, displayCode: 35, greenPulses: 3, redPulses: 5, title: "Tanker Pressure Sensor Disconnected" },
-      { internalCode: 14, displayCode: 36, greenPulses: 3, redPulses: 6, title: "External Pressure Sensor Disconnected" },
-      { internalCode: 15, displayCode: 42, greenPulses: 4, redPulses: 2, title: "Precharge Timeout" },
-      { internalCode: 16, displayCode: 43, greenPulses: 4, redPulses: 3, title: "Obstructed Pump" },
-      { internalCode: 17, displayCode: 52, greenPulses: 5, redPulses: 2, title: "Tanker High Level" },
-      { internalCode: 18, displayCode: 58, greenPulses: 5, redPulses: 8, title: "HVIL or Trailer Power Cycled" },
-      { internalCode: 19, displayCode: 62, greenPulses: 6, redPulses: 2, title: "Truck Enclosure ECU CAN-Bus Communication Timeout" },
-      { internalCode: 20, displayCode: 63, greenPulses: 6, redPulses: 3, title: "Button Panel CAN-Bus Communication Timeout" },
-      { internalCode: 21, displayCode: 64, greenPulses: 6, redPulses: 4, title: "Motor Controller CAN-Bus Communication Timeout" },
-      { internalCode: 22, displayCode: 65, greenPulses: 6, redPulses: 5, title: "IMD CAN-Bus Communication Timeout" },
-      { internalCode: 23, displayCode: 66, greenPulses: 6, redPulses: 6, title: "Truck J1939 CAN-Bus Communication Timeout" },
-      { internalCode: 24, displayCode: 71, greenPulses: 7, redPulses: 1, title: "Welded Contactor Contacts" },
-      { internalCode: 25, displayCode: 72, greenPulses: 7, redPulses: 2, title: "IMD Voltage Isolation" },
-      { internalCode: 26, displayCode: 73, greenPulses: 7, redPulses: 3, title: "IMD Over Voltage" },
-      { internalCode: 27, displayCode: 74, greenPulses: 7, redPulses: 4, title: "IMD Voltage Isolation Uncertainty" },
-      { internalCode: 28, displayCode: 75, greenPulses: 7, redPulses: 5, title: "IMD Over Voltage Uncertainty" },
-      { internalCode: 29, displayCode: 76, greenPulses: 7, redPulses: 6, title: "PTO Override Valve Latched Closed" },
-      { internalCode: 30, displayCode: 77, greenPulses: 7, redPulses: 7, title: "Precharge Circuit Disconnected" }
+      {
+        internalCode: 8,
+        displayCode: 29,
+        greenPulses: 2,
+        redPulses: 9,
+        title: "Main Power Fault",
+        summary: "Main DC power was interrupted while running. This usually means the TPC or RPC cable is damaged or disconnected.",
+        checks: [
+          "Check orange wires for damage.",
+          "Confirm the TPC connectors are secure.",
+          "Confirm the RPC connectors are secure.",
+          "If this fault occurs, replacement TPC or RPC cables may be required."
+        ],
+        clearAction: clearByIgnition
+      },
+      {
+        internalCode: 9,
+        displayCode: 31,
+        greenPulses: 3,
+        redPulses: 1,
+        title: "Pump Back-Driven Direction Fault",
+        summary: "Crude oil may be driving the pump before startup, in the opposite direction from the selected LOAD/UNLOAD direction.",
+        checks: [
+          "Look for an external pump starting early, gravity flow, or high head pressure.",
+          "Close a valve to stop the pump from being back-driven, then start the system.",
+          "Open the valve as soon as the pump starts turning to avoid a quick pressure build-up."
+        ],
+        clearAction: clearByPanelPower
+      },
+      {
+        internalCode: 10,
+        displayCode: 32,
+        greenPulses: 3,
+        redPulses: 2,
+        title: "Tanker On-Load Overpressure",
+        summary: "The pressure between the pump and tanker exceeded the tanker on-load high pressure limit.",
+        checks: [
+          "Check whether the tanker is full with no vent relief.",
+          "Check for obstructions between the pump and tanker downstream of the pressure sensor.",
+          "Check for closed tanker relief vents."
+        ],
+        clearAction: clearByPanelPower
+      },
+      {
+        internalCode: 11,
+        displayCode: 33,
+        greenPulses: 3,
+        redPulses: 3,
+        title: "Tanker Off-Load Over Vacuum",
+        summary: "The pressure between the pump and tanker exceeded the tanker off-load high vacuum limit.",
+        checks: [
+          "Check for closed tanker relief vents.",
+          "Check for obstructions between the pump and tanker upstream of the pressure sensor.",
+          "Verify the line from pump to tanker is open."
+        ],
+        clearAction: clearByPanelPower
+      },
+      {
+        internalCode: 12,
+        displayCode: 34,
+        greenPulses: 3,
+        redPulses: 4,
+        title: "Tanker Off-Load Over Pressure",
+        summary: "The pressure between the pump and external connection exceeded the tanker off-load high pressure limit.",
+        checks: [
+          "Check for a blocked transfer hose or pipe.",
+          "Check for valves that should be open but are closed.",
+          "Inspect the off-load hose or pipe for obstructions."
+        ],
+        clearAction: clearByPanelPower
+      },
+      {
+        internalCode: 13,
+        displayCode: 35,
+        greenPulses: 3,
+        redPulses: 5,
+        title: "Tanker Pressure Sensor Disconnected",
+        summary: "The tanker pressure sensor raw voltage is outside the expected normal-operation range.",
+        checks: pressureSensorChecks("tanker pressure sensor"),
+        clearAction: clearByPanelPower
+      },
+      {
+        internalCode: 14,
+        displayCode: 36,
+        greenPulses: 3,
+        redPulses: 6,
+        title: "External Pressure Sensor Disconnected",
+        summary: "The external pressure sensor raw voltage is outside the expected normal-operation range.",
+        checks: pressureSensorChecks("external pressure sensor"),
+        clearAction: clearByPanelPower
+      },
+      {
+        internalCode: 15,
+        displayCode: 42,
+        greenPulses: 4,
+        redPulses: 2,
+        title: "Precharge Timeout",
+        summary: "The motor controller did not report precharge ready within the allowed time after validating generator voltage.",
+        checks: [
+          "Check whether the generator is running too slowly.",
+          "Check whether truck idle speed is set too low.",
+          "If the fault persists after idle speed is corrected, contact DryDrive or LOVIS support."
+        ],
+        clearAction: clearByPanelPower
+      },
+      {
+        internalCode: 16,
+        displayCode: 43,
+        greenPulses: 4,
+        redPulses: 3,
+        title: "Obstructed Pump",
+        summary: "The pump was difficult to turn during the first seconds of startup.",
+        checks: [
+          "Check for frozen water in the pump.",
+          "Check for a closed valve near the pump input or output.",
+          "Check whether thick material is physically jamming the pump.",
+          "Briefly running the pump in reverse may help clear an obstruction."
+        ],
+        clearAction: clearByPanelPower
+      },
+      {
+        internalCode: 17,
+        displayCode: 52,
+        greenPulses: 5,
+        redPulses: 2,
+        title: "Tanker High Level",
+        summary: "The +12V run signal from the tanker level detection system dropped. This can mean the tanker is full or the level signal circuit has failed.",
+        checks: [
+          "Confirm whether this tanker has an aftermarket level detection system.",
+          "Check whether the tanker is full.",
+          "Inspect the level detection signal connector.",
+          "Check the DryDrive high-level wire for nicks or cuts.",
+          "Verify 12V is present during normal operation and absent at high level."
+        ],
+        clearAction: clearByPanelPower
+      },
+      {
+        internalCode: 18,
+        displayCode: 58,
+        greenPulses: 5,
+        redPulses: 8,
+        title: "HVIL or Trailer Power Cycled",
+        summary: "The high-voltage interlock loop dropped power to the DC contactors, or trailer enclosure power was off/cycled.",
+        checks: [
+          "Confirm trailer enclosure power is on and has not cycled.",
+          "Check the trailer power switch.",
+          "Check the E-stop push button and reset it by twisting and pulling if pushed.",
+          "Check trailer and tractor enclosure door switches.",
+          "Check the main tractor/trailer disconnect and HVIL cable connections."
+        ],
+        clearAction: clearByIgnition
+      },
+      {
+        internalCode: 19,
+        displayCode: 62,
+        greenPulses: 6,
+        redPulses: 2,
+        title: "Truck Enclosure ECU CAN-Bus Communication Timeout",
+        summary: "The truck enclosure ECU stopped communicating on the DryDrive CAN bus beyond the allowed timeout.",
+        checks: canTimeoutChecks("Truck enclosure ECU"),
+        clearAction: clearByPanelPower
+      },
+      {
+        internalCode: 20,
+        displayCode: 63,
+        greenPulses: 6,
+        redPulses: 3,
+        title: "Button Panel CAN-Bus Communication Timeout",
+        summary: "The button panel stopped communicating on the DryDrive CAN bus beyond the allowed timeout.",
+        checks: canTimeoutChecks("Button panel"),
+        clearAction: clearByPanelPower
+      },
+      {
+        internalCode: 21,
+        displayCode: 64,
+        greenPulses: 6,
+        redPulses: 4,
+        title: "Motor Controller CAN-Bus Communication Timeout",
+        summary: "The motor controller stopped communicating on the DryDrive CAN bus beyond the allowed timeout.",
+        checks: canTimeoutChecks("Motor controller"),
+        clearAction: clearByPanelPower
+      },
+      {
+        internalCode: 22,
+        displayCode: 65,
+        greenPulses: 6,
+        redPulses: 5,
+        title: "IMD CAN-Bus Communication Timeout",
+        summary: "The isolation monitoring device stopped communicating on the DryDrive CAN bus beyond the allowed timeout.",
+        checks: [
+          "Check truck side enclosure connectors.",
+          "Check CAN wiring to the IMD.",
+          "If the fault returns after reset, contact DryDrive or LOVIS support."
+        ],
+        clearAction: clearByIgnition
+      },
+      {
+        internalCode: 23,
+        displayCode: 66,
+        greenPulses: 6,
+        redPulses: 6,
+        title: "Truck J1939 CAN-Bus Communication Timeout",
+        summary: "Truck J1939 CAN communication went dark beyond the allowed timeout. Current systems monitor this communication and do not use it for functional decisions.",
+        checks: [
+          "Check the green J1939 connector under the dash.",
+          "Check the CPC cable connector into the truck side enclosure.",
+          "Have a DryDrive representative disable this communication only if appropriate for this truck."
+        ],
+        clearAction: clearByPanelPower
+      },
+      {
+        internalCode: 24,
+        displayCode: 71,
+        greenPulses: 7,
+        redPulses: 1,
+        title: "Welded Contactor Contacts",
+        summary: "The DC contactors are checked during startup. This fault means a contactor appears stuck closed.",
+        checks: [
+          "Do not keep trying to start the system if this repeats.",
+          "The likely cause is welded contactor contacts.",
+          "Contact DryDrive or LOVIS support for contactor service or replacement."
+        ],
+        clearAction: clearByIgnition
+      },
+      {
+        internalCode: 25,
+        displayCode: 72,
+        greenPulses: 7,
+        redPulses: 2,
+        title: "IMD Voltage Isolation",
+        summary: "The IMD detected possible voltage leakage between the high-voltage system and the truck low-voltage/chassis ground system.",
+        checks: [
+          "Follow truck shutdown and lockout procedure before inspection.",
+          "Inspect orange high-voltage wires for abrasion, cuts, scratches, or insulation wear.",
+          "Check for ground faults or other signs of leakage.",
+          "Contact DryDrive or LOVIS support for parts and service."
+        ],
+        clearAction: clearByIgnition
+      },
+      {
+        internalCode: 26,
+        displayCode: 73,
+        greenPulses: 7,
+        redPulses: 3,
+        title: "IMD Over Voltage",
+        summary: "The IMD detected generator voltage above the high-voltage threshold, causing the DryDrive dash light to flash.",
+        checks: [
+          "Check truck idle speed.",
+          "Confirm idle speed is within the PTO limits in the manual.",
+          "Confirm the truck has not been driven with PTO engaged."
+        ],
+        clearAction: clearByIgnition
+      },
+      {
+        internalCode: 27,
+        displayCode: 74,
+        greenPulses: 7,
+        redPulses: 4,
+        title: "IMD Voltage Isolation Uncertainty",
+        summary: "The IMD detected excessive variation while measuring isolation/leakage values.",
+        checks: [
+          "Possible causes include a failing generator, electrical noise, or a failing IMD card.",
+          "Contact DryDrive or LOVIS support for service."
+        ],
+        clearAction: clearByIgnition
+      },
+      {
+        internalCode: 28,
+        displayCode: 75,
+        greenPulses: 7,
+        redPulses: 5,
+        title: "IMD Over Voltage Uncertainty",
+        summary: "The IMD detected excessive variation while measuring over-voltage values.",
+        checks: [
+          "Possible causes include a failing generator, electrical noise, or a failing IMD card.",
+          "Contact DryDrive or LOVIS support for service."
+        ],
+        clearAction: clearByIgnition
+      },
+      {
+        internalCode: 29,
+        displayCode: 76,
+        greenPulses: 7,
+        redPulses: 6,
+        title: "PTO Override Valve Latched Closed",
+        summary: "The system started with the PTO override valve set closed, often because a previous fault shifted the valve and was not properly cleared.",
+        checks: [
+          "Cycle truck ignition to clear the latched valve state.",
+          "If it returns, check for the earlier fault that caused the PTO valve to close."
+        ],
+        clearAction: clearByIgnition
+      },
+      {
+        internalCode: 30,
+        displayCode: 77,
+        greenPulses: 7,
+        redPulses: 7,
+        title: "Precharge Circuit Disconnected",
+        summary: "No voltage is coming out of the generator/rectifier even though PTO is engaged and the generator is spinning. The likely cause is a broken wire or blown fuse in the rectifier enclosure.",
+        checks: [
+          "Confirm PTO is engaged and the generator is spinning.",
+          "Check for voltage output from the generator and rectifier.",
+          "Inspect rectifier enclosure wiring for a broken wire.",
+          "Check for a blown fuse in the rectifier enclosure.",
+          "Contact DryDrive or LOVIS support if the fault persists."
+        ],
+        clearAction: clearByPanelPower
+      }
     ];
 
     const charts = {};
@@ -2348,7 +2719,7 @@
 
       document.getElementById("faultInfoTitle").textContent = title;
       document.getElementById("faultInfoSummary").textContent = info?.summary || (code
-        ? "This code is recognized by telemetry, but detailed troubleshooting notes have not been captured in the dashboard yet. Use the display code and pulse pattern with the DryDrive fault guide."
+        ? "This code is not in the dashboard fault table yet. Confirm the live error code and pulse pattern with the DryDrive fault guide."
         : "No active error code is available.");
       document.getElementById("faultInternalCode").textContent = code || "--";
       document.getElementById("faultDisplayCode").textContent = info?.displayCode ?? "--";
